@@ -2,6 +2,14 @@
 
 Node.js 20以上，无需安装依赖。工作目录运行 `npm start`，首页 http://localhost:3000 打开登录与注册页面，也可直接访客使用。
 
+## 界面预览
+
+登录首页及访客使用后的智能问答、情景实训、普法学习、报告表单、个人记录和培训台账，可查看[电脑端界面截图](docs/UI_PREVIEW.md)。截图视口为 1440 × 900。
+
+![强制报告智能体登录首页](docs/screenshots/01-login.png)
+
+## 启动与使用
+
 - 登录与注册：http://localhost:3000/login
 - 公众报告端：http://localhost:3000/report
 - 接收工作台：http://localhost:3000/receiver
