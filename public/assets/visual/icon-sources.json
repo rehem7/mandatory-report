@@ -1,0 +1,122 @@
+[
+  {
+    "key": "arrow",
+    "name": "arrow-up-right",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/arrow-up-right.svg",
+    "sha256": "50b2503b9d11881142255466b7e3461d022b919735841c321d72003ac9959fe1"
+  },
+  {
+    "key": "book",
+    "name": "book-open",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/book-open.svg",
+    "sha256": "9b9bed0ff057283d5c5c5a1c71f8d3e927db26a56639603a92fdf7b25961510e"
+  },
+  {
+    "key": "check",
+    "name": "circle-check",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/circle-check.svg",
+    "sha256": "9711e045a5999f8a3b0782eb88e09b04e0559bc7b379dcc0a4ae645223e10345"
+  },
+  {
+    "key": "clock",
+    "name": "clock-3",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/clock-3.svg",
+    "sha256": "0e097d0b66278965fb53bc14900575d95f5c21b9cca932028bbb33294b56c9e2"
+  },
+  {
+    "key": "community",
+    "name": "users-round",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/users-round.svg",
+    "sha256": "8b41ee3ada1609e25a410d64056aa333952cf27d770f0c379a100065270de7f7"
+  },
+  {
+    "key": "file",
+    "name": "file-text",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/file-text.svg",
+    "sha256": "52ca55846c202335fb870c8aa23e9345630ec10489303756d62e750f7109605c"
+  },
+  {
+    "key": "hands",
+    "name": "hand-heart",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/hand-heart.svg",
+    "sha256": "3b771b097487bf83f5f6d5a07845eb7e4fd3bad8e5dc0bfbfee08c6cd045868a"
+  },
+  {
+    "key": "heart",
+    "name": "heart-handshake",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/heart-handshake.svg",
+    "sha256": "4b891b9c7f394643f540f9ff96fb8054bc6891a6aee427b0227743ec3098a82e"
+  },
+  {
+    "key": "home",
+    "name": "house",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/house.svg",
+    "sha256": "28216c479005731ef5e382e7d8627eda2b129b019eb1f3d9de9f5915576d448e"
+  },
+  {
+    "key": "inbox",
+    "name": "inbox",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/inbox.svg",
+    "sha256": "1838482c53d0846badef9be96fdcf7a167064241bd4891efa995c77ebec5f187"
+  },
+  {
+    "key": "leaf",
+    "name": "sprout",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/sprout.svg",
+    "sha256": "cf4cd97166b3239348dfe2a94dad045bf788883c32292b16fd8c953f619a4f7b"
+  },
+  {
+    "key": "listen",
+    "name": "ear",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/ear.svg",
+    "sha256": "e21daec5f858b1825a8d8a3cc5558562fd9852ede4f09c5787a6950fbf026145"
+  },
+  {
+    "key": "lock",
+    "name": "lock-keyhole",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/lock-keyhole.svg",
+    "sha256": "fc0b8b7590d1d9e9bb0112c5c2e15a78ade0bfeca6d6f8c79fbbe149236d74be"
+  },
+  {
+    "key": "medical",
+    "name": "stethoscope",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/stethoscope.svg",
+    "sha256": "a5621a048bcb911d4d51a6b8e6b5821dc68b0e7554dc001389ee9bc5f251c3ad"
+  },
+  {
+    "key": "phone",
+    "name": "phone",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/phone.svg",
+    "sha256": "bd59dd10667cbe410a69e2fbbf4d9645d08abe862c8d89082bd4f533957859a8"
+  },
+  {
+    "key": "review",
+    "name": "clipboard-check",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/clipboard-check.svg",
+    "sha256": "e2bac86a6b24caa0d7d0dcc2719ec6b7870ec5eef2d21afae498d8cb5eefda96"
+  },
+  {
+    "key": "scale",
+    "name": "scale",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/scale.svg",
+    "sha256": "a7faa238b153311b18aaffb14ade8989128eaac35a92482edb7a7ee04c7333de"
+  },
+  {
+    "key": "shield",
+    "name": "shield-check",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/shield-check.svg",
+    "sha256": "8d4fcdbde5bba4abb1a2f6fe53e37ceb6343a1d5449a9d88f6f97c1971d26c4e"
+  },
+  {
+    "key": "spark",
+    "name": "messages-square",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/messages-square.svg",
+    "sha256": "97733c58b74f8beddd569927f8453c86bca4afa394e6aad606db1acff4bd8355"
+  },
+  {
+    "key": "teacher",
+    "name": "graduation-cap",
+    "url": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/graduation-cap.svg",
+    "sha256": "326b4a1c18429509a697cbc0c49fdfcf9316da34bcf581569c2fc73cc772b86f"
+  }
+]

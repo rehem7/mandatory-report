@@ -53,11 +53,18 @@ test("停止回填、提前停止、工具草稿、用户记忆隔离及不支�
     res.writeHead(200, { "Content-Type": "text/event-stream" });
     const delta = value => res.write('data: ' + JSON.stringify({ choices: [{ delta: value }] }) + '\n\n');
     const end = () => res.end('data: [DONE]\n\n');
+    // Provider-only reasoning must never become public activity or answer text.
+    delta({ reasoning_content: "PRIVATE_REASONING_SENTINEL" });
+    if (mode === "pretoken") return;
     if (mode === "gated") { res.once("close", () => { upstreamClosed = true; }); delta({ content: "尚未完成的回答" }); return; }
     if (mode === "tools" && !request.messages.some(m => m.role === "tool")) {
       const args = JSON.stringify({ description: "我发现虚构学生有伤痕且害怕回家", types: ["身体虐待"], identity: "教师/教育工作者" });
       delta({ tool_calls: [{ index: 0, id: "draft-call", type: "function", function: { name: "prepare_report_draft", arguments: args.slice(0, 15) } }] });
       delta({ tool_calls: [{ index: 0, function: { arguments: args.slice(15) } }, { index: 1, id: "pref-call", type: "function", function: { name: "remember_user_preference", arguments: JSON.stringify({ preference: "回答先给操作步骤" }) } }] });
+      return end();
+    }
+    if (mode === "invalid-tool" && !request.messages.some(m => m.role === "tool")) {
+      delta({ tool_calls: [{ index: 0, id: "invalid", type: "function", function: { name: "prepare_report_draft", arguments: JSON.stringify({ description: "" }) } }] });
       return end();
     }
     delta({ content: "已完成测试回复，可核对报告草稿。" }); end();
@@ -81,6 +88,23 @@ test("停止回填、提前停止、工具草稿、用户记忆隔离及不支�
   const stop = (s, requestId, user = owner) => request("/api/sessions/" + s.id + "/stop", { learnerId: "public", requestId }, user);
   const collect = async response => { const events = []; await readEvents(response.body, e => events.push({ event: e.event, value: JSON.parse(e.data) })); return events; };
   try {
+    mode = "pretoken";
+    const waiting = await create(), beforeText = [], waitingResponse = await send(waiting, "首字前进度测试", "pretoken-test");
+    await readEvents(waitingResponse.body, async e => {
+      const value = JSON.parse(e.data); beforeText.push({ event: e.event, value });
+      if (e.event === "activity" && value.step.detail?.includes("连接已建立")) {
+        const snapshot = await get(waiting);
+        assert.equal(snapshot.busy, true); assert.equal(snapshot.generation.content, "");
+        assert.equal(snapshot.generation.activity.at(-1).status, "running");
+        assert.equal(snapshot.messages.some(m => m.role === "assistant"), false);
+        await stop(waiting, "pretoken-test");
+      }
+    });
+    assert.equal(beforeText.some(e => e.event === "delta"), false);
+    assert.equal(beforeText.at(-1).event, "stopped");
+    assert.ok(beforeText.some(e => e.event === "activity" && e.value.step.status === "cancelled"));
+    assert.doesNotMatch(JSON.stringify(beforeText), /PRIVATE_REASONING_SENTINEL/);
+    mode = "gated";
     const s = await create(), response = await send(s, "请停止后回填这条问题", "stop-test");
     let stopResult;
     const events = [];
@@ -108,6 +132,16 @@ test("停止回填、提前停止、工具草稿、用户记忆隔离及不支�
     const completedStop = await (await stop(s, "tool-test")).json();
     assert.equal(completedStop.stopped, false); assert.equal(completedStop.completed, true);
     const saved = await get(s);
+    const trace = saved.messages.at(-1).activity;
+    assert.deepEqual(trace.map(step => step.label), ["请求模型", "整理报告草稿", "准备记忆更新", "请求模型"]);
+    assert.ok(trace.every(step => step.status === "done"));
+    for (const step of trace.filter(step => step.kind === "tool")) {
+      const transitions = done.filter(e => e.event === "activity" && e.value.step.id === step.id).map(e => e.value.step.status);
+      assert.deepEqual(transitions, ["running", "done"]);
+    }
+    assert.ok(done.findIndex(e => e.event === "activity") < done.findIndex(e => e.event === "delta"));
+    assert.doesNotMatch(JSON.stringify(trace), /虚构学生|回答先给操作步骤|PRIVATE_REASONING_SENTINEL|local-test-placeholder|arguments/);
+    assert.doesNotMatch(JSON.stringify(done), /PRIVATE_REASONING_SENTINEL/);
     assert.equal(saved.messages.length, 2); assert.equal(saved.reportDraft.fields.identity, "教师/教育工作者");
     assert.equal(saved.reportDraft.fields.region, ""); assert.equal(saved.reportDraft.fields.age, "");
     assert.equal((await memory(owner)).longTerm, "回答先给操作步骤"); assert.equal((await memory(owner)).shortTerm.length, 1);
@@ -115,6 +149,10 @@ test("停止回填、提前停止、工具草稿、用户记忆隔离及不支�
     assert.equal((await request("/api/sessions?learnerId=public", undefined, stranger).then(r => r.json())).length, 0);
     const sameOwner = await (await request("/api/memory?learnerId=teacher-1")).json(); assert.equal(sameOwner.longTerm, "回答先给操作步骤", "客户端传入身份不能切换记忆所有者");
     assert.equal((await request("/api/reports").then(r => r.json())).length, 0, "工具只能准备草稿，不能提交");
+    mode = "invalid-tool";
+    const failedTool = await create(), failedEvents = await collect(await send(failedTool, "工具参数失败测试", "failed-tool"));
+    assert.equal(failedEvents.at(-1).event, "done", "工具失败后允许模型解释失败");
+    assert.equal((await get(failedTool)).messages.at(-1).activity.find(s => s.kind === "tool").status, "error");
     mode = "normal";
     const next = await create(); await collect(await send(next, "另一个虚构制度问题", "next"));
     assert.ok(lastRequest.messages.some(m => m.role === "system" && m.content.includes("回答先给操作步骤")), "长期记忆进入新会话上下文");
@@ -124,6 +162,7 @@ test("停止回填、提前停止、工具草稿、用户记忆隔离及不支�
     mode = "unsupported";
     const fallback = await create(), fallbackEvents = await collect(await send(fallback, "虚构线索需要整理报告", "unsupported"));
     assert.equal(fallbackEvents.at(-1).event, "done"); assert.equal((await get(fallback)).toolsUnsupported, true);
+    assert.ok(fallbackEvents.some(e => e.event === "activity" && e.value.step.status === "warning" && e.value.step.label === "工具兼容性检查"));
     const draft = await (await request("/api/sessions/" + fallback.id + "/report-draft", { learnerId: "public", model })).json();
     assert.equal(draft.fields.description, "用户明确提供的虚构事件");
     assert.equal(draft.fields.reporter.name, "");

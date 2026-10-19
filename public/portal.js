@@ -1,15 +1,21 @@
 import { api, post, esc, time, toast, icon, openDialog, bindDialog } from "/common.js";
-import { mountShell, learnerId } from "/shell.js";
-import { accountState } from "/account.js";
+import { mountShell, activateShell, learnerId } from "/shell.js";
+import { accountState, bootstrapData } from "/account.js";
 import { readEvents } from "/event-stream.js";
 import { modelBrand, displayModelName } from "/model-brand.js";
 import { listDrafts, getDraft, saveDraft, removeDraft, syncDrafts, flushDrafts } from "/report-drafts.js";
+import { art, banner, emptyArtwork, artCredit, installVisuals } from "/visual.js";
+import { activityHTML } from "/activity-view.js";
+import { renderMarkdown } from "/markdown.js";
 const $ = id => document.getElementById(id);
-const page = location.pathname.slice(1) || "ask";
+let page = location.pathname.slice(1) || "ask";
 const main = $("portal-main");
+installVisuals(main);
 let data, config, current = null, generating = false, recent = [], learning = [], filter = "all", pendingDelete = null;
 let streamingText = "", streamingKind = "message", streamingModel = "", streamError = false;
+let streamingActivity = [];
 let activeRequestId = null, streamController = null, stopRequested = false, stopping = false, stopPromise = null, outgoingText = "", pollVersion = 0;
+let navigationVersion = 0, navigationBusy = false, pendingAction = 0, queuedNavigation = null;
 const quickQuestions = [
   ["教师发现伤痕怎么办？", "学生出现伤痕并害怕回家，教师应该怎么做？"],
   ["证据不充分能报告吗？", "没有完整证据，可以报告疑似侵害吗？"],
@@ -57,12 +63,12 @@ function startQuestions() {
 }
 window.addEventListener("pagehide", stopQuestions);
 window.addEventListener("pageshow", () => { if ($("question-carousel")) startQuestions(); });
-const query = new URLSearchParams(location.search);
+let query = new URLSearchParams(location.search);
 const model = () => $("model-choice")?.value || localStorage.getItem("chosenModel") || config.defaultModel;
 const modelName = id => config.models.find(m => m.id === id)?.name || displayModelName(id);
 const modelIdentity = id => config.models.find(m => m.id === id) || modelBrand(id);
 const modelImage = (id, size = 28, named = false) => { const identity = modelIdentity(id); return `<img src="${esc(identity.icon)}" alt="${named ? esc(identity.brandName) : ""}" width="${size}" height="${size}">`; };
-const text = value => esc(value).replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/^\s*\* +/gm, "• ").replace(/^#{1,4} (.+)$/gm, "<strong>$1</strong>");
+const text = renderMarkdown;
 const personUrl = path => path + (path.includes("?") ? "&" : "?") + "learnerId=" + encodeURIComponent(learnerId());
 const sessionGet = id => api(personUrl("/api/sessions/" + encodeURIComponent(id)));
 const disclaimer = `<div class="legal-notice">AI 仅供辅助参考，不构成法律意见；紧急危险请直接拨打 <strong>110</strong>。请保护未成年人隐私，仅提供必要信息。</div>`;
@@ -72,7 +78,7 @@ function picker() {
   return `<div class="model-picker"><span class="model-picker-label">对话模型</span><input type="hidden" id="model-choice" value="${esc(selected)}"><button type="button" id="model-trigger" class="model-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="model-options">${modelImage(selected, 25)}<span id="model-current-name">${esc(modelName(selected))}</span><svg class="model-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7 5 5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div id="model-menu" class="model-menu" hidden><div class="model-menu-caption">选择对话模型</div><div id="model-options" role="listbox" aria-label="选择对话模型">${config.models.map(m => `<button type="button" role="option" class="model-option" data-model-id="${esc(m.id)}" aria-selected="${m.id === selected}" tabindex="-1">${modelImage(m.id, 26)}<span>${esc(m.name)}</span><span class="model-check" aria-hidden="true">✓</span></button>`).join("")}</div></div></div>`;
 }
 function intro(title, description, actions = "") { return `<div class="page-intro"><div><div class="eyebrow">强制报告 · 公众服务</div><h1>${title}</h1><p>${description}</p></div>${actions ? `<div class="intro-actions">${actions}</div>` : ""}</div>`; }
-function footer() { return `<div class="portal-footer"><span>强制报告智能体 · 让每一条线索被看见</span><span>${accountState.authenticated ? "记录随账号保存" : "访客记录 · 当前浏览器可见"}</span></div>`; }
+function footer() { return `<div class="portal-footer"><span>强制报告智能体 · 让每一条线索被看见</span><div class="footer-links">${artCredit}<a href="/credits" target="_blank" rel="noopener">素材与致谢</a><span>${accountState.authenticated ? "记录随账号保存" : "访客记录 · 当前浏览器可见"}</span></div></div>`; }
 function closeModelMenu(focus = false) {
   if (!$("model-menu")) return;
   $("model-menu").hidden = true; $("model-trigger").setAttribute("aria-expanded", "false");
@@ -118,7 +124,21 @@ function bindModel() {
 }
 document.addEventListener("click", e => { if (!e.target.closest(".model-picker")) closeModelMenu(); });
 function streamMessageHTML() {
-  return `<div class="message assistant streaming-message"><span class="message-avatar">${modelImage(streamingModel || model())}</span><div class="message-body"><div id="streaming-message-text" class="message-text">${streamingText ? text(streamingText) : '<span class="thinking-dots" aria-label="正在等待模型回复"><i></i><i></i><i></i></span>'}</div><div class="message-meta"><span id="streaming-message-status">${streamError ? "回答中断 · 此片段未保存，可重试" : streamingText ? "正在回复…" : "正在思考…"}</span> · ${esc(modelName(streamingModel || model()))}</div></div></div>`;
+  return `<div class="message assistant streaming-message"><span class="message-avatar">${modelImage(streamingModel || model())}</span><div class="message-body"><div id="stream-activity">${activityHTML(streamingActivity, !streamError)}</div><div id="streaming-message-text" class="message-text">${streamingText ? text(streamingText) : streamError ? '' : '<span class="thinking-dots" aria-label="正在等待模型回复"><i></i><i></i><i></i></span>'}</div><div class="message-meta"><span id="streaming-message-status">${streamError ? "回答中断 · 此片段未保存，可重试" : streamingText ? "正在回复…" : "等待模型响应…"}</span> · ${esc(modelName(streamingModel || model()))}</div></div></div>`;
+}
+function showActivity(step) {
+  if (stopRequested || !step?.id) return;
+  const index = streamingActivity.findIndex(item => item.id === step.id);
+  if (index >= 0) streamingActivity[index] = step;
+  else if (streamingActivity.length < 32) streamingActivity.push(step);
+  const target = $("stream-activity");
+  if (!target) return;
+  const container = $("chat-messages"), follow = container && container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+  const previous = target.querySelector("details"), open = previous?.open;
+  // Preserve the user's expanded/collapsed choice without disturbing the reply or input.
+  target.innerHTML = activityHTML(streamingActivity, !streamError);
+  if (previous) target.querySelector("details").open = open;
+  if (follow) container.scrollTop = container.scrollHeight;
 }
 function showDelta(content) {
   if (stopRequested) return;
@@ -129,7 +149,7 @@ function showDelta(content) {
   if ($("streaming-message-status")) $("streaming-message-status").textContent = "正在回复…";
   if (follow) container.scrollTop = container.scrollHeight;
 }
-function clearStream() { streamingText = ""; streamError = false; }
+function clearStream() { streamingText = ""; streamError = false; streamingActivity = []; }
 async function streamSession(path, payload, kind = "message") {
   clearStream(); streamingKind = kind; streamingModel = payload.model; closeModelMenu();
   streamController = new AbortController();
@@ -140,8 +160,9 @@ async function streamSession(path, payload, kind = "message") {
   let result;
   await readEvents(response.body, ({ event, data: raw }) => {
     const value = JSON.parse(raw);
-    if (event === "session") { if (!stopRequested) { current = value; if (kind === "feedback") renderTraining(); else updateChat(); } }
+    if (event === "session") { if (!stopRequested) { current = value; streamingActivity = value.generation?.activity || []; if (kind === "feedback") renderTraining(); else updateChat(); } }
     else if (event === "delta") showDelta(value.content);
+    else if (event === "activity") showActivity(value.step);
     else if (event === "status") { if (!stopRequested && $("streaming-message-status")) $("streaming-message-status").textContent = value.label; }
     else if (event === "done") { result = value; return false; }
     else if (event === "stopped") { result = { ...value.session, stopped: true, restore: value.restore }; return false; }
@@ -151,7 +172,7 @@ async function streamSession(path, payload, kind = "message") {
   clearStream(); return result;
 }
 function messagesHTML(s) {
-  return s.messages.map(m => `<div class="message ${m.role === "user" ? "user" : "assistant"}"><span class="message-avatar">${m.role === "user" ? "我" : modelImage(m.model || s.model, 28, true)}</span><div class="message-body"><div class="message-text">${text(m.content)}</div>${m.sources?.length ? `<div class="message-sources"><span>联网参考 · 中等范围</span>${m.sources.map(source => `<a href="${esc(source.url)}" target="_blank" rel="noopener noreferrer">${esc(source.title)} ↗</a>`).join("")}<p>${esc(m.searchNote || "")}</p></div>` : ""}<div class="message-meta">${m.origin === "scenario" ? "练习情景 · 角色开场" : m.role === "user" ? "我的提问" : "AI · " + esc(modelName(m.model || s.model))} · ${time(m.time)}</div></div></div>`).join("") + (s.kind === "qa" && s.reportDraft ? `<section class="chat-report-action"><div><strong>已根据对话整理报告草稿</strong><p>${esc(s.reportDraft.fields.description.slice(0, 100))}</p><small>未知信息留空；进入表单后请核对，尚未提交。</small></div><button type="button" class="primary mini" data-open-report="${esc(s.id)}">检查并填写报告 ↗</button></section>` : "");
+  return s.messages.map(m => `<div class="message ${m.role === "user" ? "user" : "assistant"}"><span class="message-avatar">${m.role === "user" ? "我" : modelImage(m.model || s.model, 28, true)}</span><div class="message-body">${m.role === "assistant" ? activityHTML(m.activity) : ""}<div class="message-text">${text(m.content)}</div>${m.sources?.length ? `<div class="message-sources"><span>联网参考 · 中等范围</span>${m.sources.map(source => `<a href="${esc(source.url)}" target="_blank" rel="noopener noreferrer">${esc(source.title)} ↗</a>`).join("")}<p>${esc(m.searchNote || "")}</p></div>` : ""}<div class="message-meta">${m.origin === "scenario" ? "练习情景 · 角色开场" : m.role === "user" ? "我的提问" : "AI · " + esc(modelName(m.model || s.model))} · ${time(m.time)}</div></div></div>`).join("") + (s.kind === "qa" && s.reportDraft ? `<section class="chat-report-action"><div><strong>已根据对话整理报告草稿</strong><p>${esc(s.reportDraft.fields.description.slice(0, 100))}</p><small>未知信息留空；进入表单后请核对，尚未提交。</small></div><button type="button" class="primary mini" data-open-report="${esc(s.id)}">检查并填写报告 ↗</button></section>` : "");
 }
 function composer() { return `<form id="chat-form" class="chat-composer"><label for="chat-input" class="visually-hidden">输入对话内容</label><textarea id="chat-input" rows="1" maxlength="4000" placeholder="描述您的问题；请不要提供真实未成年人的个人信息…"></textarea><div class="composer-bottom"><span>Enter 发送 · Shift + Enter 换行<br>对话会保存到“我的记录”</span><button id="chat-send" class="primary" type="submit">发送 <span aria-hidden="true">↑</span></button></div></form>`; }
 function chatCard(training = false) {
@@ -160,7 +181,7 @@ function chatCard(training = false) {
 function updateChat() {
   if (!$("chat-messages")) return;
   stopQuestions();
-  $("chat-messages").innerHTML = current ? messagesHTML(current) : `<div class="chat-welcome"><span class="welcome-symbol">${icon("spark")}</span><h2>先聊聊您遇到的情况。</h2><p>了解什么时候需要报告，以及如何保护、记录和求助。</p><div id="question-carousel" class="question-carousel" aria-live="off"><div id="quick-questions" class="question-examples">${questionButtons()}</div></div></div>`;
+  $("chat-messages").innerHTML = current ? messagesHTML(current) : `<div class="chat-welcome"><div class="welcome-scene"><div class="welcome-copy"><span class="visual-eyebrow">从看见孩子，到站在孩子身边</span><h2>先聊聊您遇到的情况。</h2><p>关于孩子的不安、求助和需要，<br>我们一起理清保护的下一步。</p><div class="welcome-assurance"><span>${icon("listen")}认真倾听</span><span>${icon("shield")}保护隐私</span></div></div>${art('reading', 'welcome-art', true)}</div><div id="question-carousel" class="question-carousel" aria-live="off"><div id="quick-questions" class="question-examples">${questionButtons()}</div></div></div>`;
   if (!current) startQuestions();
   const retry = $("chat-retry");
   const pending = current?.messages.at(-1)?.role === "user";
@@ -170,7 +191,7 @@ function updateChat() {
   $("chat-send").disabled = stopping || (canStop ? !current?.id : generating || pending);
   $("chat-send").textContent = stopping ? "正在停止…" : canStop ? "停止 ■" : "发送 ↑";
   $("chat-send").classList.toggle("stop-generation", canStop);
-  if (!stopRequested && (generating || streamError && streamingText) && streamingKind === "message") $("chat-messages").insertAdjacentHTML("beforeend", streamMessageHTML());
+  if (!stopRequested && (generating || streamError && (streamingText || streamingActivity.length)) && streamingKind === "message") $("chat-messages").insertAdjacentHTML("beforeend", streamMessageHTML());
   if ($("model-trigger")) $("model-trigger").disabled = generating;
   if (current?.kind === "qa") { $("chat-title").textContent = current.title; $("chat-subtitle").textContent = "当前模型 " + modelName(model()); }
   $("chat-messages").scrollTop = $("chat-messages").scrollHeight;
@@ -201,27 +222,29 @@ function resumeGeneration(s) {
   if (!s.busy) return;
   const version = ++pollVersion;
   activeRequestId = s.generation?.id || null; outgoingText = s.messages.at(-1)?.role === "user" ? s.messages.at(-1).content : "";
-  generating = true; streamingKind = s.generation?.kind || (s.state === "completed" ? "feedback" : "message"); streamingModel = s.model; streamingText = s.generation?.content || "";
+  generating = true; streamingKind = s.generation?.kind || (s.state === "completed" ? "feedback" : "message"); streamingModel = s.model; streamingText = s.generation?.content || ""; streamingActivity = s.generation?.activity || [];
   if (s.state === "completed") renderTraining(); else updateChat();
   const id = s.id;
   const poll = async () => {
     if (current?.id !== id || version !== pollVersion || stopRequested) return;
-    try { const result = await sessionGet(id); if (version !== pollVersion || stopRequested) return; current = result; if (current.busy) { streamingText = current.generation?.content || ""; if (current.state === "completed") renderTraining(); else updateChat(); setTimeout(poll, 2000); } else { generating = false; clearStream(); if (page === "training" && current.state === "completed") renderTraining(); else updateChat(); } }
+    try { const result = await sessionGet(id); if (version !== pollVersion || stopRequested) return; current = result; if (current.busy) { streamingText = current.generation?.content || ""; streamingActivity = current.generation?.activity || []; if (current.state === "completed") renderTraining(); else updateChat(); setTimeout(poll, 2000); } else { generating = false; clearStream(); if (page === "training" && current.state === "completed") renderTraining(); else updateChat(); } }
     catch { generating = false; updateChat(); }
   };
   setTimeout(poll, 2000);
 }
-async function refreshRecent() { recent = await api(personUrl("/api/sessions")); if ($("chat-session-list")) renderRecent(); }
+async function refreshRecent() { const version = navigationVersion; const value = await api(personUrl("/api/sessions")); if (version !== navigationVersion) return; recent = value; if ($("chat-session-list")) renderRecent(); }
 function renderRecent() { $("chat-session-list").innerHTML = recent.filter(s => s.kind === "qa").slice(0, 12).map(s => `<button class="session-link ${s.id === current?.id ? "active" : ""}" type="button" data-session="${s.id}"><span>${esc(s.title)}</span></button>`).join("") || `<p class="muted">还没有问答记录</p>`; }
 async function qaPage() {
+  const version = navigationVersion;
   main.innerHTML = intro("智能问答", "从一个问题开始，了解报告与保护的下一步。", `<button type="button" data-open-memory class="secondary mini">我的记忆</button>` + picker()) + disclaimer + `<div class="chat-layout"><aside class="chat-sessions"><h3>最近的对话</h3><button id="new-chat" type="button" class="secondary">＋ 新建问答</button><div id="chat-session-list" class="chat-session-list"></div></aside>${chatCard()}</div><div class="qa-links"><span>联网检索 · 中等范围 · 尚未接入专用案例库</span><div class="actions"><button type="button" class="text-button mini" data-build-report>从对话整理报告 ↗</button><a href="/report">填写表单 ↗</a></div></div>` + footer();
   bindModel(); bindComposer(); updateChat();
-  $("new-chat").onclick = () => { if (generating) return toast("请等待当前回复完成"); clearStream(); current = null; history.replaceState(null, "", "/ask"); $("chat-title").textContent = "强制报告助手"; $("chat-input").value = ""; updateChat(); renderRecent(); };
+  $("new-chat").onclick = () => { if (generating) return toast("请等待当前回复完成"); clearStream(); current = null; replacePortalURL("/ask"); $("chat-title").textContent = "强制报告助手"; $("chat-input").value = ""; updateChat(); renderRecent(); };
   await refreshRecent();
+  if (version !== navigationVersion) return;
   if (query.get("session")) { const s = await sessionGet(query.get("session")); if (s.kind !== "qa") throw Error("会话类型不匹配"); openQA(s); }
   if (query.get("question")) { $("chat-input").value = query.get("question").slice(0, 4000); resizeComposer(); $("chat-input").focus(); }
 }
-function openQA(s) { clearStream(); current = s; setModel(s.model); history.replaceState(null, "", "/ask?session=" + s.id); updateChat(); renderRecent(); resumeGeneration(s); }
+function openQA(s) { clearStream(); current = s; setModel(s.model); replacePortalURL("/ask?session=" + s.id); updateChat(); renderRecent(); resumeGeneration(s); }
 async function sendMessage(retry = false) {
   if (generating) return;
   const content = $("chat-input").value.trim();
@@ -234,13 +257,13 @@ async function sendMessage(retry = false) {
   streamingModel = selected;
   let beforeCount = current?.messages.length || 0;
   try {
-    if (!current) { current = await post("/api/sessions", { kind: "qa", learnerId: learnerId(), model: selected }); history.replaceState(null, "", "/ask?session=" + current.id); }
+    if (!current) { current = await post("/api/sessions", { kind: "qa", learnerId: learnerId(), model: selected }); replacePortalURL("/ask?session=" + current.id); }
     beforeCount = current.messages.length;
     if (!retry) { current.messages.push({ role: "user", content, time: new Date().toISOString() }); $("chat-input").value = ""; }
     updateChat();
     const result = await streamSession(`/api/sessions/${current.id}/${retry ? "reply" : "messages"}`, { learnerId: learnerId(), model: selected, content });
     if (!stopRequested) { current = result; if (result.stopped) { $("chat-input").value = result.restore?.content || outgoingText; clearStream(); } }
-  } catch (e) { if (!stopRequested) { streamError = !!streamingText; toast(e.message); if (current?.id) { try { current = await sessionGet(current.id); if (!retry && current.messages.length <= beforeCount) $("chat-input").value = content; } catch {} } } }
+  } catch (e) { if (!stopRequested) { streamError = !!(streamingText || streamingActivity.length); toast(e.message); if (current?.id) { try { current = await sessionGet(current.id); if (!retry && current.messages.length <= beforeCount) $("chat-input").value = content; } catch {} } } }
   finally { if (stopPromise) await stopPromise; generating = false; stopping = false; stopRequested = false; activeRequestId = null; streamController = null; if (current?.messages.at(-1)?.role === "assistant") clearStream(); if (current?.busy) resumeGeneration(current); else updateChat(); if (page === "ask") await refreshRecent(); }
 }
 async function stopReply() {
@@ -280,7 +303,8 @@ async function openReportDraft(value) {
 }
 function trainingListing() {
   clearStream(); current = null;
-  main.innerHTML = intro("情景实训", "通过练习案例提升沟通、判断和报告能力，完成后获得评分与纠错。", picker()) + disclaimer + `<div class="case-grid-public">${data.cases.map((c, i) => `<section class="scenario-card"><div class="scenario-top"><span class="scenario-number">情景 ${String(i + 1).padStart(2, "0")}</span><span class="badge subtle">练习案例</span></div><h2>${esc(c.title)}</h2><p>${esc(c.summary)}</p><div class="case-tags"><span>${esc(c.role)}</span><span>·</span><span>${esc(c.character)}</span><span>· ${c.difficulty}</span></div><button type="button" class="primary" data-start="${c.id}">开始实训 →</button></section>`).join("")}</div>` + footer(); bindModel();
+  const caseIcon = role => /教师|学校/.test(role) ? 'teacher' : /医护|医生/.test(role) ? 'medical' : /社区|工作/.test(role) ? 'community' : 'hands';
+  main.innerHTML = intro("情景实训", "通过练习案例提升沟通、判断和报告能力，完成后获得评分与纠错。", picker()) + disclaimer + banner("training") + `<div class="case-grid-public">${data.cases.map((c, i) => `<section class="scenario-card" data-reveal data-spotlight><div class="scenario-top"><span class="scenario-symbol">${icon(caseIcon(c.role))}</span><span class="scenario-number">情景 ${String(i + 1).padStart(2, "0")}</span><span class="badge subtle">练习案例</span></div><h2>${esc(c.title)}</h2><p>${esc(c.summary)}</p><div class="case-tags"><span>${esc(c.role)}</span><span>·</span><span>${esc(c.character)}</span><span>· ${c.difficulty}</span></div><button type="button" class="primary" data-start="${c.id}">开始实训 →</button></section>`).join("")}</div>` + footer(); bindModel();
 }
 const checks = (options, name) => options.map((o, i) => `<label class="checkline"><input type="checkbox" name="${name}" value="${i}">${esc(o)}</label>`).join("");
 function worksheetHTML(c) {
@@ -304,7 +328,7 @@ function scoreHTML(s) {
 function feedbackHTML(s) {
   const active = s.busy || generating && streamingKind === "feedback";
   const content = s.feedback || (active ? streamingText : "");
-  return `<section class="feedback-panel"><h2>纠错与复盘</h2>${content || active ? `<span class="badge" style="margin-bottom:14px">AI · ${esc(modelName(s.model))}</span><div id="feedback-stream-text" class="feedback-text">${content ? text(content) : '<span class="thinking-dots" aria-label="正在等待复盘"><i></i><i></i><i></i></span>'}</div>${active ? '<div class="stream-status" role="status">正在生成复盘…</div>' : ""}` : `<div class="portal-error">${esc(s.feedbackError || "尚未生成AI复盘")}<button type="button" class="mini" data-feedback style="margin-left:10px">重试AI复盘</button></div>`}<div class="fixed-feedback">${s.score.items.map(item => `<p><strong>${item.title} · ${item.score}/20：</strong>${esc(item.advice)}</p>`).join("")}</div><p class="muted">本次为实训作答，不提交到接收工作台；AI反馈不构成法律意见。</p></section>`;
+  return `<section class="feedback-panel"><h2>纠错与复盘</h2>${active ? `<div id="stream-activity">${activityHTML(streamingActivity, true)}</div>` : activityHTML(s.feedbackActivity)}${content || active ? `<span class="badge" style="margin-bottom:14px">AI · ${esc(modelName(s.model))}</span><div id="feedback-stream-text" class="feedback-text">${content ? text(content) : '<span class="thinking-dots" aria-label="正在等待复盘"><i></i><i></i><i></i></span>'}</div>${active ? '<div class="stream-status" role="status">正在生成复盘…</div>' : ""}` : `<div class="portal-error">${esc(s.feedbackError || "尚未生成AI复盘")}<button type="button" class="mini" data-feedback style="margin-left:10px">重试AI复盘</button></div>`}<div class="fixed-feedback">${s.score.items.map(item => `<p><strong>${item.title} · ${item.score}/20：</strong>${esc(item.advice)}</p>`).join("")}</div><p class="muted">本次为实训作答，不提交到接收工作台；AI反馈不构成法律意见。</p></section>`;
 }
 function renderTraining() {
   const c = data.cases.find(c => c.id === current.caseId);
@@ -322,15 +346,20 @@ function renderTraining() {
   };
   $("save-worksheet").onclick = async () => { if (generating) return toast("请等待当前生成完成"); $("save-worksheet").disabled = true; try { current = await post(`/api/sessions/${current.id}/worksheet`, { learnerId: learnerId(), worksheet: getWorksheet() }); toast("填写进度已保存，刷新后可继续"); } catch (e) { toast(e.message); } finally { $("save-worksheet").disabled = false; } };
 }
-async function trainingPage() { trainingListing(); if (query.get("session")) { current = await sessionGet(query.get("session")); if (current.kind !== "training") throw Error("会话类型不匹配"); renderTraining(); resumeGeneration(current); } else if (query.get("case")) await startTraining(query.get("case")); }
-async function startTraining(id) { current = await post("/api/sessions", { kind: "training", learnerId: learnerId(), model: model(), caseId: id }); history.replaceState(null, "", "/training?session=" + current.id); renderTraining(); }
+async function trainingPage() { const version = navigationVersion; trainingListing(); if (query.get("session")) { const value = await sessionGet(query.get("session")); if (version !== navigationVersion) return; current = value; if (current.kind !== "training") throw Error("会话类型不匹配"); renderTraining(); resumeGeneration(current); } else if (query.get("case")) await startTraining(query.get("case")); }
+async function startTraining(id) { current = await post("/api/sessions", { kind: "training", learnerId: learnerId(), model: model(), caseId: id }); replacePortalURL("/training?session=" + current.id); renderTraining(); }
 async function learningPage() {
-  learning = await api(personUrl("/api/learning"));
+  const version = navigationVersion, value = await api(personUrl("/api/learning"));
+  if (version !== navigationVersion) return;
+  learning = value;
   const applicable = [...data.materials].sort((a, b) => Number(b.roles.includes(data.who.role)) - Number(a.roles.includes(data.who.role)));
-  main.innerHTML = intro("普法学习", `为${data.who.role === "公众" ? "公众" : data.who.role + "岗位"}准备的要点、实操问答与短案例。`) + `<div class="legal-notice">材料为内置制度要点，来源可查；短案例均为虚构。当前未接入案例知识库。</div><div class="lesson-grid">${applicable.map(m => { const done = learning.some(r => r.materialId === m.id); return `<section class="lesson-card"><div class="lesson-meta"><span>${m.format} · 约${m.minutes}分钟</span><span class="badge ${done ? "" : "subtle"}">${done ? "已完成" : "待学习"}</span></div><h2>${esc(m.title)}</h2><p>${esc(m.intro)}</p><ul>${m.points.map(p => `<li>${esc(p)}</li>`).join("")}</ul><div class="lesson-qa"><strong>${esc(m.question)}</strong><p>${esc(m.answer)}</p></div><div class="lesson-sources">${m.sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title)} ↗</a>`).join("")}</div><button type="button" class="${done ? "secondary" : "primary"}" data-learn="${m.id}" ${done ? "disabled" : ""}>${done ? "✓ 学习已记录" : "我已阅读，记录完成"}</button></section>`; }).join("")}</div>` + footer();
+  main.innerHTML = intro("普法学习", `为${data.who.role === "公众" ? "公众" : data.who.role + "岗位"}准备的要点、实操问答与短案例。`) + `<div class="legal-notice">材料为内置制度要点，来源可查；短案例均为虚构。当前未接入案例知识库。</div>` + banner("learning") + `<div class="lesson-grid">${applicable.map(m => { const done = learning.some(r => r.materialId === m.id); return `<section class="lesson-card" data-reveal data-spotlight><div class="lesson-meta"><span class="lesson-symbol">${icon("book")}</span><span>${m.format} · 约${m.minutes}分钟</span><span class="badge ${done ? "" : "subtle"}">${done ? "已完成" : "待学习"}</span></div><h2>${esc(m.title)}</h2><p>${esc(m.intro)}</p><ul>${m.points.map(p => `<li>${esc(p)}</li>`).join("")}</ul><div class="lesson-qa"><strong>${esc(m.question)}</strong><p>${esc(m.answer)}</p></div><div class="lesson-sources">${m.sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title)} ↗</a>`).join("")}</div><button type="button" class="${done ? "secondary" : "primary"}" data-learn="${m.id}" ${done ? "disabled" : ""}>${done ? "✓ 学习已记录" : "我已阅读，记录完成"}</button></section>`; }).join("")}</div>` + footer();
 }
 async function recordsPage() {
-  [recent, learning, data.receipts] = await Promise.all([api(personUrl("/api/sessions")), api(personUrl("/api/learning")), api("/api/my-reports"), syncDrafts(learnerId())]);
+  const version = navigationVersion;
+  const [values] = await Promise.all([api("/api/portal/records"), syncDrafts(learnerId())]);
+  if (version !== navigationVersion) return;
+  recent = values.sessions; learning = values.learning; data.receipts = values.receipts;
   main.innerHTML = intro("我的记录", accountState.authenticated ? `${data.who.name}的对话、学习、报告与草稿，随账号保存。` : "当前浏览器的访客记录，与登录账号的记录分开保存。", `<button type="button" data-refresh-records class="secondary mini">刷新记录 ↻</button>`) + `<div id="record-filters" class="records-toolbar"></div><div id="record-list" class="portal-records"></div>` + footer(); renderRecords();
 }
 function renderRecords() {
@@ -340,7 +369,7 @@ function renderRecords() {
   $("record-filters").innerHTML = Object.entries(labels).map(([key, title]) => `<button type="button" class="${key === filter ? "active" : ""}" data-filter="${key}">${title} ${key === "all" ? all.length : all.filter(s => s.type === key).length}</button>`).join("");
   const shown = all.filter(r => filter === "all" || r.type === filter);
   const draftHTML = r => `<article class="portal-record"><span class="portal-record-icon">${icon("file")}</span><div class="portal-record-info"><h3>${esc(r.title)}</h3><p>报告草稿 · ${time(r.updatedAt)}${r.attachmentName ? " · 含附件" : ""}</p></div><span class="badge amber">未提交</span><div class="actions"><a class="draft-resume" href="/report?draft=${encodeURIComponent(r.id)}">继续填写 ↗</a><button type="button" class="text-button" data-delete-draft="${esc(r.id)}">删除草稿</button></div></article>`;
-  $("record-list").innerHTML = shown.map(r => r.type === "draft" ? draftHTML(r) : `<article class="portal-record"><span class="portal-record-icon">${icon(r.type === "qa" ? "spark" : r.type === "training" ? "review" : r.type === "learning" ? "book" : "file")}</span><div class="portal-record-info"><h3>${esc(r.title)}</h3><p>${labels[r.type]} · ${time(r.updatedAt)}${r.model ? " · " + esc(modelName(r.model)) : ""}</p></div><span class="badge ${r.score && !r.score.passed ? "amber" : "subtle"}">${r.type === "report" ? esc(r.status) : r.type === "learning" ? "已完成" : r.score ? r.score.total + "分 · " + (r.score.passed ? "达标" : "未达标") : r.type === "training" ? "进行中" : r.messageCount + "条消息"}</span><div class="actions">${r.type === "qa" || r.type === "training" ? `<button type="button" data-open-record="${r.id}">查看</button>${r.type === "training" || r.state !== "completed" ? `<a href="/${r.type === "qa" ? "ask" : "training"}?session=${r.id}">${r.state === "completed" ? "复盘" : "继续"} ↗</a>` : ""}<button type="button" class="text-button" data-delete-session="${r.id}">删除</button>` : r.type === "learning" ? `<a href="/learning">查看材料 ↗</a><button type="button" class="text-button" data-delete-learning="${r.id}">删除记录</button>` : `<a href="/report">报告表单 ↗</a>`}</div></article>`).join("") || `<div class="empty">${icon("inbox")}<h3>这里还没有记录</h3><p class="muted">开始一次问答、实训或学习后，记录会自动保存。</p></div>`;
+  $("record-list").innerHTML = shown.map(r => r.type === "draft" ? draftHTML(r) : `<article class="portal-record"><span class="portal-record-icon">${icon(r.type === "qa" ? "spark" : r.type === "training" ? "review" : r.type === "learning" ? "book" : "file")}</span><div class="portal-record-info"><h3>${esc(r.title)}</h3><p>${labels[r.type]} · ${time(r.updatedAt)}${r.model ? " · " + esc(modelName(r.model)) : ""}</p></div><span class="badge ${r.score && !r.score.passed ? "amber" : "subtle"}">${r.type === "report" ? esc(r.status) : r.type === "learning" ? "已完成" : r.score ? r.score.total + "分 · " + (r.score.passed ? "达标" : "未达标") : r.type === "training" ? "进行中" : r.messageCount + "条消息"}</span><div class="actions">${r.type === "qa" || r.type === "training" ? `<button type="button" data-open-record="${r.id}">查看</button>${r.type === "training" || r.state !== "completed" ? `<a href="/${r.type === "qa" ? "ask" : "training"}?session=${r.id}">${r.state === "completed" ? "复盘" : "继续"} ↗</a>` : ""}<button type="button" class="text-button" data-delete-session="${r.id}">删除</button>` : r.type === "learning" ? `<a href="/learning">查看材料 ↗</a><button type="button" class="text-button" data-delete-learning="${r.id}">删除记录</button>` : `<a href="/report">报告表单 ↗</a>`}</div></article>`).join("") || emptyArtwork("这里还没有记录", "开始一次问答、实训或学习后，记录会自动保存。");
 }
 function worksheetReview(s) {
   if (!s.worksheet) return "";
@@ -353,11 +382,14 @@ async function openRecord(id) {
   $("record-detail-body").querySelector("[data-feedback]")?.remove(); openDialog($("record-detail"));
 }
 async function ledgerPage(unitId = query.get("unit") || data.who.unitId || data.units[0].id) {
+  const version = navigationVersion;
   const ledger = await api("/api/units/" + encodeURIComponent(unitId));
-  main.innerHTML = intro("培训台账", "查看您的学习与实训完成情况，导出履职培训摘要。", `<a class="export-link" href="/api/units/${encodeURIComponent(unitId)}/export.csv">导出台账 ↓</a>`) + `<div class="stats ledger-stats">${[["已完成实训", ledger.totals.completed], ["达标实训", ledger.totals.passed], ["学习完成", ledger.totals.learning]].map(([title, n]) => `<div class="stat"><div class="stat-label">${title}</div><strong>${n}</strong><p>${esc(data.who.name)}</p></div>`).join("")}</div><p class="ledger-note">台账仅包含当前用户的完成情况和评分摘要。</p><section class="ledger-panel"><div class="table-wrap"><table class="case-table"><thead><tr>${["学员 / 岗位", "类型", "案例 / 课程", "完成情况", "总分 / 达标", "时间"].map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${ledger.rows.map(r => `<tr><td>${esc(data.who.name)}<div class="muted">${esc(data.who.role)}</div></td><td>${r.kind}</td><td>${esc(r.title)}</td><td><span class="badge subtle">${r.state}</span></td><td>${r.score ? r.score.total + " / " + (r.score.passed ? "达标" : "未达标") : "—"}</td><td>${time(r.time)}</td></tr>`).join("") || '<tr><td colspan="6" class="empty">还没有培训记录。完成学习或实训后将在这里显示。</td></tr>'}</tbody></table></div></section>` + footer();
+  if (version !== navigationVersion) return;
+  main.innerHTML = intro("培训台账", "查看您的学习与实训完成情况，导出履职培训摘要。", `<a class="export-link" href="/api/units/${encodeURIComponent(unitId)}/export.csv">导出台账 ↓</a>`) + `<div class="stats ledger-stats">${[["已完成实训", ledger.totals.completed], ["达标实训", ledger.totals.passed], ["学习完成", ledger.totals.learning]].map(([title, n]) => `<div class="stat"><div class="stat-label">${title}</div><strong>${n}</strong><p>${esc(data.who.name)}</p></div>`).join("")}</div><p class="ledger-note">台账仅包含当前用户的完成情况和评分摘要。</p><section class="ledger-panel"><div class="table-wrap"><table class="case-table"><thead><tr>${["学员 / 岗位", "类型", "案例 / 课程", "完成情况", "总分 / 达标", "时间"].map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${ledger.rows.map(r => `<tr><td>${esc(data.who.name)}<div class="muted">${esc(data.who.role)}</div></td><td>${r.kind}</td><td>${esc(r.title)}</td><td><span class="badge subtle">${r.state}</span></td><td>${r.score ? r.score.total + " / " + (r.score.passed ? "达标" : "未达标") : "—"}</td><td>${time(r.time)}</td></tr>`).join("") || '<tr><td colspan="6">' + emptyArtwork('还没有培训记录', '完成学习或实训后将在这里显示。') + '</td></tr>'}</tbody></table></div></section>` + footer();
 }
 main.onclick = async e => {
   const button = e.target.closest("button"); if (!button || button.disabled) return;
+  pendingAction++;
   try {
     if (button.dataset.question) { $("chat-input").value = button.dataset.question; resizeComposer(); $("chat-input").focus(); }
     else if (button.hasAttribute("data-open-memory")) await openMemory();
@@ -372,7 +404,7 @@ main.onclick = async e => {
     else if (button.dataset.session) { if (generating) return toast("请等待回复完成"); openQA(await sessionGet(button.dataset.session)); }
     else if (button.hasAttribute("data-retry")) await sendMessage(true);
     else if (button.dataset.start) { button.disabled = true; await startTraining(button.dataset.start); }
-    else if (button.hasAttribute("data-back-training")) { if (generating) return toast("请等待生成完成"); history.replaceState(null, "", "/training"); trainingListing(); }
+    else if (button.hasAttribute("data-back-training")) { if (generating) return toast("请等待生成完成"); replacePortalURL("/training"); trainingListing(); }
     else if (button.hasAttribute("data-feedback")) {
       if (generating) return;
       clearStream(); streamingKind = "feedback"; generating = true; button.disabled = true; button.textContent = "正在生成…";
@@ -387,6 +419,7 @@ main.onclick = async e => {
     else if (button.dataset.deleteDraft) { pendingDelete = { kind: "draft", id: button.dataset.deleteDraft }; openDialog($("delete-dialog")); }
     else if (button.dataset.deleteSession || button.dataset.deleteLearning) { pendingDelete = { kind: button.dataset.deleteSession ? "sessions" : "learning", id: button.dataset.deleteSession || button.dataset.deleteLearning }; openDialog($("delete-dialog")); }
   } catch (e) { toast(e.message); if (button.isConnected) button.disabled = false; }
+  finally { pendingAction--; }
 };
 bindDialog($("record-detail")); bindDialog($("delete-dialog"));
 bindDialog($("memory-dialog"));
@@ -394,10 +427,84 @@ $("memory-close").onclick = () => $("memory-dialog").close();
 $("memory-save").onclick = async () => { $("memory-save").disabled = true; try { await post("/api/memory", { learnerId: learnerId(), longTerm: $("memory-long-term").value }); $("memory-dialog").close(); toast("长期记忆已保存，会在此身份的新对话中使用"); } catch (e) { toast(e.message); } finally { $("memory-save").disabled = false; } };
 $("memory-clear").onclick = async () => { $("memory-clear").disabled = true; try { await api(personUrl("/api/memory"), { method: "DELETE" }); await openMemory(); toast("长期与短期记忆已清空，对话记录仍保留"); } catch (e) { toast(e.message); } finally { $("memory-clear").disabled = false; } };
 $("close-record").onclick = () => $("record-detail").close(); $("delete-cancel").onclick = () => $("delete-dialog").close();
-$("delete-confirm").onclick = async () => { if (!pendingDelete) return; $("delete-confirm").disabled = true; try { if (pendingDelete.kind === "draft") await removeDraft(learnerId(), pendingDelete.id); else await api(personUrl(`/api/${pendingDelete.kind}/${pendingDelete.id}`), { method: "DELETE" }); $("delete-dialog").close(); pendingDelete = null; await recordsPage(); toast("记录已删除"); } catch (e) { toast(e.message); } finally { $("delete-confirm").disabled = false; } };
+$("delete-confirm").onclick = async () => { if (!pendingDelete) return; $("delete-confirm").disabled = true; try { if (pendingDelete.kind === "draft") await removeDraft(learnerId(), pendingDelete.id); else await api(personUrl(`/api/${pendingDelete.kind}/${pendingDelete.id}`), { method: "DELETE" }); if (pendingDelete.kind === "sessions") for (const [url, state] of pageCache) if (state.current?.id === pendingDelete.id) pageCache.delete(url); $("delete-dialog").close(); pendingDelete = null; await recordsPage(); toast("记录已删除"); } catch (e) { toast(e.message); } finally { $("delete-confirm").disabled = false; } };
+const routes = { ask: qaPage, training: trainingPage, learning: learningPage, records: recordsPage, ledger: () => ledgerPage() };
+const pageTitles = { ask: "智能问答", training: "情景实训", learning: "普法学习", records: "我的记录", ledger: "培训台账" };
+// Live DOM fragments preserve unsent messages, worksheet inputs and their listeners.
+// This cache belongs only to this document and its authenticated owner.
+const pageCache = new Map();
+let displayedURL = location.pathname + location.search;
+const currentURL = () => location.pathname + location.search;
+function replacePortalURL(url) { history.replaceState(null, '', url); displayedURL = currentURL(); }
+function finishNavigation() {
+  navigationBusy = false;
+  const queued = queuedNavigation; queuedNavigation = null;
+  if (queued) navigate(queued.url, queued.push);
+}
+function savePage(url) {
+  const fragment = document.createDocumentFragment();
+  const focused = main.contains(document.activeElement) ? document.activeElement : null;
+  const state = { fragment, owner: accountState.ownerId, current, recent, learning, filter, receipts: data.receipts, questionPage, scrollY: scrollY, focused };
+  while (main.firstChild) fragment.append(main.firstChild);
+  pageCache.delete(url); pageCache.set(url, state);
+  while (pageCache.size > 8) pageCache.delete(pageCache.keys().next().value);
+}
+function setPageTitle() { document.title = pageTitles[page] + " · 强制报告智能体"; activateShell(page); }
+function configuredNotice() {
+  if (!config.configured && ["ask", "training"].includes(page) && !main.querySelector('[data-ai-unavailable]')) main.insertAdjacentHTML("afterbegin", `<div class="portal-error" data-ai-unavailable>真实AI功能暂不可用，请检查服务端配置。</div>`);
+}
+async function navigate(url, push = true) {
+  if (!routes[url.pathname.slice(1)]) return;
+  const next = url.pathname + url.search;
+  if (next === currentURL() && push) return;
+  // Existing full navigation semantics are retained for in-flight AI or mutations.
+  if (generating || pendingAction) { location.href = url.href; return; }
+  if (navigationBusy) { queuedNavigation = { url, push }; return; }
+  stopQuestions(); composerObserver?.disconnect(); ++pollVersion; ++navigationVersion;
+  for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
+  savePage(displayedURL);
+  if (push) history.pushState(null, '', next);
+  page = url.pathname.slice(1); query = new URLSearchParams(url.search); displayedURL = next;
+  setPageTitle();
+  const cached = pageCache.get(next);
+  if (cached?.owner === accountState.ownerId) {
+    ({ current, recent, learning, filter, questionPage } = cached); data.receipts = cached.receipts;
+    main.append(cached.fragment); pageCache.delete(next);
+    if ($('chat-input')) bindComposer();
+    if ($('question-carousel')) startQuestions();
+    window.scrollTo({ top: cached.scrollY, behavior: 'instant' });
+    if (cached.focused?.isConnected) cached.focused.focus({ preventScroll: true });
+    // Dynamic data is revalidated in the background, never persisted across owners.
+    const refresh = ({ ask: refreshRecent, records: recordsPage, learning: learningPage, ledger: () => ledgerPage() })[page];
+    if (refresh) refresh().catch(error => toast(error.message));
+    return;
+  }
+  current = null; clearStream(); filter = 'all'; questionPage = 0;
+  main.innerHTML = intro(pageTitles[page], '正在同步最新内容…') + '<div class="portal-route-skeleton" aria-hidden="true"><div></div><div></div><div></div></div>';
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  const version = navigationVersion;
+  navigationBusy = true;
+  try { await routes[page](); if (version === navigationVersion) configuredNotice(); }
+  catch (error) { if (version === navigationVersion) { pageCache.delete(next); main.innerHTML = `<div class="portal-error">${esc(error.message)}</div><a href="${esc(next)}">重新载入 ↻</a>`; } }
+  finally { if (version === navigationVersion) finishNavigation(); }
+}
+document.addEventListener('click', event => {
+  const link = event.target.closest('a[href]');
+  if (!link || event.defaultPrevented || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target || link.hasAttribute('download')) return;
+  const url = new URL(link.href);
+  if (url.origin !== location.origin || url.hash || !routes[url.pathname.slice(1)] || !data || generating || pendingAction) return;
+  event.preventDefault();
+  navigate(url);
+});
+window.addEventListener('popstate', () => {
+  const url = new URL(location.href);
+  if (!routes[url.pathname.slice(1)] || generating || pendingAction || navigationBusy) { location.reload(); return; }
+  navigate(url, false);
+});
+window.addEventListener('account-leaving', () => pageCache.clear());
 try {
-  [data, config] = await Promise.all([mountShell(page), api("/api/ai/config")]);
-  document.title = ({ ask: "智能问答", training: "情景实训", learning: "普法学习", records: "我的记录", ledger: "单位台账" })[page] + " · 强制报告智能体";
-  await ({ ask: qaPage, training: trainingPage, learning: learningPage, records: recordsPage, ledger: () => ledgerPage() })[page]();
-  if (!config.configured && ["ask", "training"].includes(page)) main.insertAdjacentHTML("afterbegin", `<div class="portal-error">服务端未读取到 FREE_API_KEY，请配置后重启；真实AI功能暂不可用。</div>`);
+  data = await mountShell(page); config = bootstrapData.config;
+  setPageTitle(); navigationBusy = true;
+  await routes[page](); displayedURL = currentURL(); configuredNotice();
 } catch (e) { main.innerHTML = `<div class="portal-error">${esc(e.message)}</div><a class="text-link" href="/${page}">重新载入 ↻</a>`; }
+finally { finishNavigation(); }

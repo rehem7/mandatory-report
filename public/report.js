@@ -2,9 +2,12 @@ import { api, esc, time, post, toast, icon, openDialog, bindDialog } from "/comm
 import { mountShell, learnerId } from "/shell.js";
 import { activeDraft, getDraft, saveDraft, removeDraft, clearActiveDraft, storeAttachment, loadAttachment, syncDrafts, flushDrafts } from "/report-drafts.js";
 import { accountState } from "/account.js";
+import { art, emptyArtwork, installVisuals } from "/visual.js";
 
 const $ = id => document.getElementById(id);
 const form = $("report-form");
+installVisuals(document.querySelector(".report-container"));
+document.getElementById("report-support-art").innerHTML = art('support', '', true);
 const identities = ["未成年本人", "家长/监护人", "教师/教育工作者", "医护人员", "社区工作人员", "其他"];
 const types = ["身体虐待", "性侵害", "情感/精神虐待", "忽视/疏于照料", "家庭暴力", "暴力伤害", "拐卖", "遗弃", "组织乞讨", "自杀/自残", "其他"];
 const owner = learnerId();
@@ -139,7 +142,7 @@ $("send").onclick = async () => {
     try { const key = "reportReceipts:v2:" + owner; const history = JSON.parse(localStorage.getItem(key) || "[]"); history.unshift(r); localStorage.setItem(key, JSON.stringify(history)); } catch { stored = false; }
     $("confirm").close();
     $("receipt").hidden = false;
-    $("receipt").innerHTML = `<div class="receipt-top"><span class="receipt-check" aria-hidden="true">✓</span><h2>已提交至接收工作台</h2></div><p>线索编号 <strong>${esc(r.id)}</strong> <span class="badge">${esc(r.status)}</span></p><p>系统接收时间：${time(r.receivedAt)}</p><div class="soft-callout reporter-privacy"><strong>报告者个人信息保密</strong><p>您提供的姓名、工作单位、联系电话等个人信息仅供内部核实与联系使用，不对外公开。</p></div><p class="muted">${accountState.authenticated ? "上报记录已保存到您的账号，可在我的记录查看。" : stored ? "查询凭证已保存在当前浏览器。" : "请另行保存查询凭证：" + esc(r.receipt)}</p><a class="text-link" href="/records">查看我的记录 ↗</a>`;
+    $("receipt").innerHTML = `<div class="receipt-top"><span class="receipt-check animated-check" aria-hidden="true">${icon("check")}</span><h2>已提交至接收工作台</h2></div><p>线索编号 <strong>${esc(r.id)}</strong> <span class="badge">${esc(r.status)}</span></p><p>系统接收时间：${time(r.receivedAt)}</p><div class="soft-callout reporter-privacy"><strong>报告者个人信息保密</strong><p>您提供的姓名、工作单位、联系电话等个人信息仅供内部核实与联系使用，不对外公开。</p></div><p class="muted">${accountState.authenticated ? "上报记录已保存到您的账号，可在我的记录查看。" : stored ? "查询凭证已保存在当前浏览器。" : "请另行保存查询凭证：" + esc(r.receipt)}</p><a class="text-link" href="/records">查看我的记录 ↗</a>`;
     ready = false;
     if (draft) { try { await removeDraft(owner, draft.id); } catch { toast("报告已提交，草稿清理未完成，请在我的记录中删除"); } }
     draft = null; attachmentFailed = false;
@@ -156,7 +159,7 @@ $("send").onclick = async () => {
 async function records() {
   const history = await api("/api/my-reports");
   if (!history.length) {
-    $("records").innerHTML = `<div class="empty"><span class="empty-icon">${icon("inbox")}</span><h3>还没有上报记录</h3><p class="muted">提交线索后，您可以在这里查看处理进度。</p></div>`;
+    $("records").innerHTML = emptyArtwork("还没有上报记录", "提交线索后，您可以在这里查看处理进度。");
     return;
   }
   const results = history;

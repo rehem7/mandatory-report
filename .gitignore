@@ -2,6 +2,8 @@ data/
 node_modules/
 *.log
 outputs/
+output/
+tmp/
 .env
 .env.*
 !.env.example

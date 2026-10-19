@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 import { handlePortal } from "./portal-api.js";
 import { attachActor, handleAuth } from "./auth.js";
 import { handleDrafts } from "./draft-api.js";
+import { staticFiles } from "./static-files.js";
+import { gzipSync } from "node:zlib";
 const root = path.dirname(fileURLToPath(import.meta.url));
+const serveStatic = staticFiles(root);
 const dir = process.env.DATA_DIR || path.join(root, "data");
 fs.mkdirSync(dir, { recursive: true });
 const file = path.join(dir, "database.json");
@@ -42,7 +45,12 @@ function view(r, role) {
   return { id: r.id, types: r.types, age: r.age, region: r.region, occurredAt: r.occurredAt, description: r.helpSummary, status: r.status, department: r.department, helpRecords: r.helpRecords, receivedAt: r.receivedAt };
 }
 const accessible = (r, role) => role === "公安" || (role === "检察院" ? r.supervision.length > 0 : r.department === role);
-function reply(res, status, value) { res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }); res.end(JSON.stringify(value)); }
+function reply(res, status, value) {
+  let payload = Buffer.from(JSON.stringify(value));
+  const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", Vary: "Accept-Encoding" };
+  if (payload.length > 1024 && /(?:^|,)\s*gzip\s*(?:,|$)/.test(res.req.headers["accept-encoding"] || "")) { payload = gzipSync(payload); headers["Content-Encoding"] = "gzip"; }
+  res.writeHead(status, headers); res.end(payload);
+}
 async function body(req) { let chunks = []; let size = 0; for await (const c of req) { size += c.length; if (size > 15 * 1024 * 1024) throw new Error("请求过大，附件最多10MB"); chunks.push(c); } return JSON.parse(Buffer.concat(chunks).toString() || "{}"); }
 export const server = http.createServer(async (req, res) => {
   try {
@@ -110,15 +118,7 @@ export const server = http.createServer(async (req, res) => {
       }
       return reply(res, 404, { error: "接口不存在" });
     }
-    const routes = { "/": "login.html", "/login": "login.html", "/login.css": "login.css", "/login.js": "login.js", "/account.js": "account.js", "/ask": "portal.html", "/training": "portal.html", "/learning": "portal.html", "/records": "portal.html", "/ledger": "portal.html", "/report": "report.html", "/receiver": "receiver.html", "/style.css": "style.css", "/portal.css": "portal.css", "/portal.js": "portal.js", "/shell.js": "shell.js", "/report.js": "report.js", "/receiver.js": "receiver.js", "/common.js": "common.js" };
-    for (const asset of ["Gemini.svg", "OpenAI.svg", "Claude.svg", "deepseek.svg", "GROK.svg", "GLM.svg", "kimi.svg", "minimax-color.svg", "longcat-bright.svg", "AI.svg"]) routes["/assets/" + asset] = "assets/" + asset;
-    routes["/model-brand.js"] = "model-brand.js";
-    routes["/event-stream.js"] = "event-stream.js";
-    routes["/report-drafts.js"] = "report-drafts.js";
-    routes["/report-tags.js"] = "report-tags.js";
-    const name = routes[url.pathname];
-    if (!name || req.method !== "GET") { res.writeHead(404); return res.end("Not found"); }
-    res.writeHead(200, { "Content-Type": name.endsWith("html") ? "text/html; charset=utf-8" : name.endsWith("css") ? "text/css; charset=utf-8" : name.endsWith("svg") ? "image/svg+xml" : "application/javascript; charset=utf-8", "X-Content-Type-Options": "nosniff" }); res.end(fs.readFileSync(path.join(root, "public", name)));
+    if (!serveStatic(req, res, url)) { res.writeHead(404); res.end("Not found"); }
   } catch (e) { if (res.headersSent) { if (!res.writableEnded) res.end(); } else reply(res, e.status || 400, { error: e.message }); }
 });
 if (process.argv[1] === fileURLToPath(import.meta.url)) { server.listen(Number(process.env.PORT || 3000), "0.0.0.0", () => console.log("报告端 http://localhost:" + (process.env.PORT || 3000) + "/report\n接收端 http://localhost:" + (process.env.PORT || 3000) + "/receiver")); setInterval(supervise, 10000).unref(); }

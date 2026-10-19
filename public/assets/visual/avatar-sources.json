@@ -1,0 +1,61 @@
+{
+  "title": "Group — Rafiki",
+  "page": "https://storyset.com/illustration/group/rafiki",
+  "url": "https://stories.freepiklabs.com/storage/58081/Group_Artboard-1.svg",
+  "sourceSha256": "5825964a003f0a1d8b18fab496b67e2042d389603599631a8ba89db8bfe92a10",
+  "attribution": "Illustrations by Storyset",
+  "license": "Storyset / Freepik License; attribution required",
+  "modified": "Isolated five adult characters, cropped head-and-shoulders, added pastel backgrounds, exported at 192×192.",
+  "files": [
+    {
+      "file": "adult-avatar-1.png",
+      "group": "character-1",
+      "viewBox": [
+        126,
+        149,
+        64,
+        64
+      ]
+    },
+    {
+      "file": "adult-avatar-2.png",
+      "group": "character-2",
+      "viewBox": [
+        169,
+        178,
+        64,
+        64
+      ]
+    },
+    {
+      "file": "adult-avatar-3.png",
+      "group": "character-3",
+      "viewBox": [
+        211,
+        179,
+        64,
+        64
+      ]
+    },
+    {
+      "file": "adult-avatar-4.png",
+      "group": "characters-4-and-5",
+      "viewBox": [
+        273,
+        149,
+        64,
+        64
+      ]
+    },
+    {
+      "file": "adult-avatar-5.png",
+      "group": "characters-4-and-5",
+      "viewBox": [
+        338,
+        174,
+        56,
+        56
+      ]
+    }
+  ]
+}

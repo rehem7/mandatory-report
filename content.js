@@ -41,6 +41,36 @@ export const materials = [
   { id: "community-duty", title: "社区村居：把照料风险看见", roles: ["社区/村居"], minutes: 4, format: "虚构短案例", intro: "邻里反映孩子独居且缺少食物。如何处理？", points: ["核实当前安全、基本照料与可联系的可靠照护人。", "疑似侵害或危险及时报告；将贫困、照料困难与具体侵害事实分开描述。", "帮扶由有关部门协同开展；报告材料仅向有必要知悉的渠道提供。"], question: "只有困难家庭才需要关注吗？", answer: "关注具体安全和照料事实，不凭家庭经济条件作侵害定性。", sourceIndexes: [0, 1] }
 ];
 export const dimensions = ["风险识别", "问询沟通", "报告判断", "证据梳理", "模拟上报"];
+export function trainingFeedbackContext(scenario, worksheet, score, messages) {
+  const selected = (indexes, options) => indexes?.length ? indexes.map(i => options[i]).filter(Boolean) : ["未选择"];
+  const filled = value => value?.trim() || "未填写";
+  const checked = value => value ? "已勾选" : "未勾选";
+  return {
+    案例: scenario.summary,
+    复盘参考: scenario.rationale,
+    实训对话: messages.map(({ role, content }) => ({ 发言者: role === "user" ? "受训者" : "案例角色", 内容: content })),
+    用户工作表: {
+      风险识别: selected(worksheet.risk, scenario.riskOptions),
+      当前安全保护措施: filled(worksheet.safety),
+      问询沟通: selected(worksheet.communication, scenario.communicationOptions),
+      报告判断: ({ report: "报告（出现疑似侵害或危险，应立即报告）", wait: "等待自行调查清楚后再报告", none: "无需关注或报告" })[worksheet.decision] || "未选择",
+      判断依据: filled(worksheet.reason),
+      证据梳理: selected(worksheet.evidence, scenario.evidenceOptions),
+      保留已有原始材料及时间信息: checked(worksheet.preserveOriginal),
+      避免公开传播可识别信息: checked(worksheet.protectPrivacy),
+      模拟上报: {
+        虚构地点: filled(worksheet.report?.location),
+        事件类型: filled(worksheet.report?.type),
+        客观经过: filled(worksheet.report?.description),
+        确认本次为虚构演练: checked(worksheet.report?.confirmFictional)
+      }
+    },
+    已确定的规则评分: {
+      总分: score.total, 满分: 100, 通过分数: score.passLine, 结果: score.passed ? "通过" : "未通过",
+      各项得分: score.items.map(item => ({ 项目: item.title, 得分: item.score, 满分: item.max, 改进参考: item.advice }))
+    }
+  };
+}
 export function gradeTraining(scenario, worksheet, messages) {
   const { risk = [], communication = [], evidence = [], safety = "", reason = "", decision, report = {} } = worksheet;
   const selection = (chosen, correct) => Math.max(0, correct.filter(i => chosen.includes(i)).length * 5 - chosen.filter(i => !correct.includes(i)).length * 5);

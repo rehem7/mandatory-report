@@ -5,6 +5,7 @@ import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { cases, gradeTraining, trainingFeedbackContext } from "../content.js";
 
 test("真实协议代理、失败重试、实训评分、记录归属、单位导出和删除", async () => {
   const requests = []; let failNext = false;
@@ -47,6 +48,15 @@ test("真实协议代理、失败重试、实训评分、记录归属、单位�
     assert.equal((await call(target + "/worksheet", { learnerId: "teacher-1", worksheet })).status, 200);
     assert.equal((await call(target + "?learnerId=teacher-1")).data.worksheet.report.location, worksheet.report.location);
     const done = (await call(target + "/finish", { learnerId: "teacher-1", model: chosen, worksheet, score: { total: 999 } })).data; assert.equal(done.score.total, 100); assert.equal(done.score.passed, true); assert.equal(done.score.items.length, 5); assert.ok(done.feedback); assert.equal(done.state, "completed");
+    const feedbackRequest = requests.at(-1).body.messages;
+    const feedbackInput = JSON.parse(feedbackRequest.at(-1).content);
+    assert.equal(feedbackInput.用户工作表.报告判断, "报告（出现疑似侵害或危险，应立即报告）");
+    assert.deepEqual(feedbackInput.用户工作表.风险识别, catalog.cases[0].riskOptions.slice(0, 2));
+    assert.equal(feedbackInput.用户工作表.保留已有原始材料及时间信息, "已勾选");
+    assert.equal(feedbackInput.用户工作表.避免公开传播可识别信息, "已勾选");
+    assert.equal(feedbackInput.已确定的规则评分.总分, done.score.total);
+    assert.deepEqual(feedbackInput.已确定的规则评分.各项得分.map(i => i.得分), done.score.items.map(i => i.score));
+    assert.ok(!/preserveOriginal|protectPrivacy|confirmFictional|"decision"|"report"|"safety"|"risk"|"score"/.test(feedbackRequest.at(-1).content));
     assert.equal((await call(target + "/finish", { learnerId: "teacher-1", worksheet })).status, 409);
     assert.equal((await call("/api/reports")).data.length, 0, "模拟上报不得进入公安队列");
     assert.equal((await call("/api/learning", { learnerId: "teacher-1", materialId: "missing" })).status, 400);
@@ -61,5 +71,21 @@ test("真实协议代理、失败重试、实训评分、记录归属、单位�
   } finally {
     await new Promise(resolve => server.close(resolve)); await new Promise(resolve => upstream.close(resolve));
     fs.unlinkSync(path.join(testData, "database.json")); fs.rmdirSync(testData);
+  }
+});
+
+test("复盘输入如实说明空白、未选和未勾选，不把选项当成实际行动", () => {
+  const worksheet = { risk: [], communication: [], evidence: [], safety: "", reason: "", decision: "", preserveOriginal: false, protectPrivacy: false, report: {} };
+  const score = gradeTraining(cases[0], worksheet, []);
+  const input = trainingFeedbackContext(cases[0], worksheet, score, []);
+  assert.deepEqual(input.用户工作表.风险识别, ["未选择"]);
+  assert.equal(input.用户工作表.报告判断, "未选择");
+  assert.equal(input.用户工作表.当前安全保护措施, "未填写");
+  assert.equal(input.用户工作表.保留已有原始材料及时间信息, "未勾选");
+  assert.equal(input.用户工作表.避免公开传播可识别信息, "未勾选");
+  assert.equal(input.用户工作表.模拟上报.确认本次为虚构演练, "未勾选");
+  assert.equal(input.已确定的规则评分.总分, score.total);
+  for (const [decision, expected] of [["wait", "等待自行调查清楚后再报告"], ["none", "无需关注或报告"]]) {
+    assert.equal(trainingFeedbackContext(cases[0], { ...worksheet, decision }, score, []).用户工作表.报告判断, expected);
   }
 });
