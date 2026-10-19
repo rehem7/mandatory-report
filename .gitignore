@@ -4,6 +4,7 @@ node_modules/
 outputs/
 output/
 tmp/
+.artifact_work/
 .env
 .env.*
 !.env.example
