@@ -56,9 +56,9 @@ UI 按 Wise 风格统一为浅绿背景、深绿文字与青柠主操作。公�
 - `[故人情]gemini-2.5-pro`。
 - `[故人情]gemini-3.1-pro-preview`。
 
-`FREE_API_KEY_2`、`FREE_API_KEY_4` 对应 `https://jianzhile.vip/v1`；`FREE_API_KEY_3` 已改为 `https://api.fuka.win/v1`。每次启动分别查询 `/models`，只加入各密钥目录中的对话模型。同型号的渠道前缀和圆圈编号不单独显示，Thinking、Search 等功能区别保留；调用时后端使用对应密钥、地址和原始模型ID。某通道在开始输出前失败，可尝试同型号的其他授权通道；已经输出片段后不切换通道拼接答案。
+`FREE_API_KEY_2` 对应 `https://jianzhile.vip/v1`；`FREE_API_KEY_3` 对应 `https://api.fuka.win/v1`。每次启动分别查询 `/models`，只加入各密钥目录中的对话模型。同型号的渠道前缀和圆圈编号不单独显示，Thinking、Search 等功能区别保留；调用时后端使用对应密钥、地址和原始模型ID。某通道在开始输出前失败，可尝试同型号的其他授权通道；已经输出片段后不切换通道拼接答案。
 
-新增型号在内部以 `jianzhile:` 或 `fuka:` 区分网关，已存在的型号保留原ID，页面只显示型号名称。图标与对话头像按厂商匹配 `public/assets/` 中的 SVG；所有 GPT 型号统一使用 OpenAI 图标，Claude 使用提供的 Claude SVG。目录为空或未配置的密钥不添加虚构选项。`AI_SECONDARY_BASE_URL` 可覆盖第2、第4通道地址，`AI_KEY_3_BASE_URL` 可覆盖第3通道地址；测试使用 `AI_CATALOG_ENABLED=0` 关闭真实目录发现。
+新增型号在内部以 `jianzhile:` 或 `fuka:` 区分网关，已存在的型号保留原ID，页面只显示型号名称。图标与对话头像按厂商匹配 `public/assets/` 中的 SVG；所有 GPT 型号统一使用 OpenAI 图标，Claude 使用提供的 Claude SVG。目录为空或未配置的密钥不添加虚构选项。`AI_SECONDARY_BASE_URL` 可覆盖第2通道地址，`AI_KEY_3_BASE_URL` 可覆盖第3通道地址；测试使用 `AI_CATALOG_ENABLED=0` 关闭真实目录发现。
 
 网关返回 429 且提供 10 秒以内的 `Retry-After` 时，在总响应超时范围内最多等待重试两次；已经开始输出文字的请求不自动重试。
 
