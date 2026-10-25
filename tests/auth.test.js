@@ -16,7 +16,8 @@ test("邮箱注册登录、固定身份、跨账号隔离、跨浏览器草稿�
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
     const b = JSON.parse(Buffer.concat(chunks)); received.push(b); res.setHeader("Content-Type", "application/json");
     const tool = b.tools && !b.messages.some(m => m.role === "tool");
-    const message = tool ? { tool_calls: [{ id: "prepare", type: "function", function: { name: "prepare_report_draft", arguments: JSON.stringify({ identity: "医护人员", description: "虚构事件", types: ["身体虐待"] }) } }] } : { content: b.tools ? "已准备草稿。" : JSON.stringify({ identity: "医护人员", description: "虚构事件", types: ["身体虐待"] }) };
+    const extraction = !b.tools ? (() => { const source = JSON.parse(b.messages.at(-1).content).at(-1); return { mode: "incident", candidates: [{ field: "description", value: source.content, kind: "observed", evidence: [{ messageId: source.id, quote: source.content }] }] }; })() : null;
+    const message = tool ? { tool_calls: [{ id: "prepare", type: "function", function: { name: "prepare_report_draft", arguments: "{}" } }] } : { content: b.tools ? "已准备核对信息。" : JSON.stringify(extraction) };
     res.end(JSON.stringify({ choices: [{ message }] }));
   });
   await new Promise(resolve => upstream.listen(0, "127.0.0.1", resolve));
@@ -46,11 +47,11 @@ test("邮箱注册登录、固定身份、跨账号隔离、跨浏览器草稿�
     assert.equal((await call(b, "/api/auth/login", { email: "teacher@example.test", password: "wrong" })).status, 401);
     assert.equal((await call(b, "/api/auth/register", { email: "doctor@example.test", identity: "医护人员" })).status, 201);
     const chat = (await call(a, "/api/sessions", { kind: "qa", model, learnerId: b.cookie() })).data;
-    const reply = await call(a, "/api/sessions/" + chat.id + "/messages", { model, content: "我在描述医护案例，请整理报告" });
-    assert.equal(reply.status, 200); assert.equal(reply.data.reportDraft.fields.identity, "教师/教育工作者");
+    const reply = await call(a, "/api/sessions/" + chat.id + "/messages", { model, content: "我在医护案例中看到虚构学生手臂有伤痕，请整理报告" });
+    assert.equal(reply.status, 200); assert.equal(reply.data.reportReview.fixedFields.identity, "教师/教育工作者");
     assert.ok(received[0].messages[0].content.includes("当前登录用户的报告身份是教师/教育工作者"));
-    const toolValue = JSON.parse(received.at(-1).messages.find(m => m.role === "tool").content); assert.equal(toolValue.fields.identity, "教师/教育工作者");
-    const manual = await call(a, "/api/sessions/" + chat.id + "/report-draft", { model }); assert.equal(manual.data.fields.identity, "教师/教育工作者");
+    const toolValue = JSON.parse(received.at(-1).messages.find(m => m.role === "tool").content); assert.equal(toolValue.fixedFields.identity, "教师/教育工作者");
+    const manual = await call(a, "/api/sessions/" + chat.id + "/report-draft", { model }); assert.equal(manual.data.fixedFields.identity, "教师/教育工作者");
     assert.equal((await call(b, "/api/sessions/" + chat.id, undefined, "GET", { "X-Chat-User": registration.data.user.id })).status, 404);
     assert.equal((await call(b, "/api/sessions/" + chat.id, undefined, "DELETE")).status, 404);
     await call(a, "/api/memory", { longTerm: "回答先给步骤" }); assert.equal((await call(b, "/api/memory")).data.longTerm, "");

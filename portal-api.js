@@ -2,9 +2,10 @@ import crypto from "node:crypto";
 import { cases, publicCases, materials, sources, gradeTraining, trainingFeedbackContext } from "./content.js";
 import { aiConfig, complete, defaultModel, qaSystem, feedbackSystem, validateModel } from "./ai.js";
 import { userMemory, memoryContext, rememberExchange, setLongTerm, forgetSession } from "./memory.js";
-import { chatTools, reportDraft, webSearch } from "./chat-tools.js";
+import { chatTools, webSearch } from "./chat-tools.js";
 import { identityContext, publicActor } from "./auth.js";
 import { createActivity } from "./activity.js";
+import { extractReportReview, confirmReportReview } from "./report-extraction.js";
 const busy = new Set();
 const live = new Map();
 const operations = new Map(), cancelledRequests = new Map();
@@ -18,7 +19,7 @@ function rateLimit(req, kind) {
   if (window.count >= (kind === "ai" ? 30 : 60)) fail("请求较频繁，请稍后再试", 429);
   window.count++; limits.set(id, window);
 }
-const summary = s => { const { messages, worksheet, feedback, feedbackActivity, ...rest } = s; return { ...rest, messageCount: messages.length }; };
+const summary = s => { const { messages, worksheet, feedback, feedbackActivity, reportReview, reportDraft, reportConfirmations, ...rest } = s; return { ...rest, messageCount: messages.length }; };
 function worksheetInput(b) {
   if (!b || typeof b !== "object" || Array.isArray(b)) fail("请填写实训记录");
   const selection = (key, max) => { if (!Array.isArray(b[key]) || b[key].some(v => !Number.isInteger(v) || v < 0 || v >= max)) fail("实训选项无效"); return [...new Set(b[key])]; };
@@ -61,7 +62,7 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
   const profile = () => req.actor.profile, userId = req.actor.ownerId;
   const memoryOwner = () => req.actor.ownerId;
   const own = item => item.ownerId === req.actor.ownerId;
-  const prepareDraft = fields => reportDraft({ ...fields, ...(req.actor.authenticated ? { identity: req.actor.user.identity, identityOther: req.actor.user.identityOther } : {}) });
+  const prepareReview = (session, model, signal) => extractReportReview(session, { complete, model, signal, actor: req.actor });
   db.sessions ||= []; db.learning ||= [];
   const catalog = () => ({ profiles: [profile()], units: [{ id: profile().unitId, name: "我的培训台账" }], cases: publicCases(), materials: materials.map(m => ({ ...m, sources: m.sourceIndexes.map(i => sources[i]) })), sources });
   if (p === "/api/portal/bootstrap" && req.method === "GET") return send(200, { account: publicActor(req), catalog: catalog(), config: aiConfig() });
@@ -92,7 +93,7 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
     const s = { id: crypto.randomUUID(), ownerId: req.actor.ownerId, learnerId: person.id, userId, kind: b.kind, model, caseId: scenario?.id || null, title: scenario?.title || "新的问答", state: "active", createdAt: now(), updatedAt: now(), messages: scenario ? [{ role: "assistant", content: scenario.opening, origin: "scenario", time: now() }] : [], score: null, feedback: "", feedbackError: null, lastError: null };
     db.sessions.push(s); save(); return send(201, s);
   }
-  const match = p.match(/^\/api\/sessions\/([^/]+)(?:\/(messages|reply|finish|feedback|worksheet|stop|report-draft))?$/);
+  const match = p.match(/^\/api\/sessions\/([^/]+)(?:\/(messages|reply|finish|feedback|worksheet|stop|report-draft|report-confirm))?$/);
   if (match) {
     const b = req.method === "POST" ? await body(req) : null;
     const learnerId = b?.learnerId || url.searchParams.get("learnerId"); profile(learnerId);
@@ -117,6 +118,17 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
     }
     if (req.method !== "POST") return send(405, { error: "不支持的请求方法" });
     if (busy.has(s.id)) fail("当前会话正在生成，请等待完成", 409);
+    if (match[2] === "report-confirm") {
+      if (s.kind !== "qa") fail("仅问答会话可整理报告");
+      const draft = confirmReportReview(s, b, req.actor);
+      // A repeated confirmation must not create several drafts after a network retry.
+      if (s.reportDraft?.confirmation?.reviewId === draft.confirmation.reviewId) {
+        const ordered = selected => JSON.stringify([...selected].sort((a, b) => a.candidateId.localeCompare(b.candidateId)));
+        if (ordered(s.reportDraft.confirmation.selected) === ordered(draft.confirmation.selected)) return send(200, s.reportDraft);
+        fail("这份核对结果已确认，请到已有表单修改，或重新整理后再确认", 409);
+      }
+      s.reportDraft = draft; s.reportConfirmations ||= []; s.reportConfirmations.push({ draftId: draft.id, ...draft.confirmation }); s.updatedAt = now(); save(); return send(200, draft);
+    }
     const model = validateModel(b.model || s.model);
     if (match[2] === "report-draft") {
       if (s.kind !== "qa" || !s.messages.some(m => m.role === "user")) fail("请先描述需要报告的情形");
@@ -124,11 +136,9 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
       rateLimit(req, "ai");
       const operation = beginOperation(s, "draft", b.requestId);
       try {
-        const result = await complete(model, [{ role: "system", content: `${identityContext(req)}
-从用户明确提供的对话事实整理报告草稿。只返回一个JSON对象，无markdown。可用字段：identity、identityOther、types、typeOther、region、address、occurredAt、age、description。identity只能是未成年本人、家长/监护人、教师/教育工作者、医护人员、社区工作人员、其他或空。types从身体虐待、性侵害、情感/精神虐待、忽视/疏于照料、家庭暴力、暴力伤害、拐卖、遗弃、组织乞讨、自杀/自残、其他选择。age只能是0-6岁、7-13岁、14-17岁、18岁以上或空。时间只有用户明确提供才按YYYY-MM-DDTHH:mm填写；不要猜测身份、地点、年龄、日期，未知字段留空。description客观整理已有事件信息，没有事件信息时留空。不从AI举的示例中补事实，不填写报告者联系方式，不提交报告。` }, { role: "user", content: JSON.stringify(s.messages.filter(m => m.role === "user").map(m => m.content)) }], undefined, { signal: operation.controller.signal });
-        if (operation.controller.signal.aborted) throw Error("操作已停止");
-        s.reportDraft = prepareDraft(JSON.parse(result.replace(/^```(?:json)?\s*|\s*```$/g, ""))); s.updatedAt = now(); save();
-        return send(200, s.reportDraft);
+        s.reportReview = await prepareReview(s, model, operation.controller.signal);
+        delete s.reportDraft; s.updatedAt = now(); save();
+        return send(200, s.reportReview);
       } finally { endOperation(s, operation); }
     }
     if (match[2] === "worksheet") {
@@ -145,6 +155,7 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
         if (typeof b.content !== "string" || !b.content.trim() || b.content.length > 4000) fail("请输入4000字以内的问题");
         if (s.messages.length >= 60) fail("本次会话已达到30轮，请新建会话");
         s.messages.push({ role: "user", content: b.content.trim(), time: now() });
+        delete s.reportReview;
         if (s.kind === "qa" && s.title === "新的问答") s.title = b.content.trim().slice(0, 28);
       } else if (s.messages.at(-1)?.role !== "user") fail("当前没有待重试的提问");
       s.model = model; s.updatedAt = now(); s.lastError = null; save();
@@ -159,7 +170,12 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
         const context = s.kind === "qa" ? memoryContext(db, person, s, owner) : s.messages.map(({ role, content }) => ({ role, content }));
         const runTool = async (name, args) => {
           if (operation.controller.signal.aborted) throw Error("生成已停止");
-          if (name === "prepare_report_draft") { stream?.status("正在整理报告草稿…"); staged.reportDraft = prepareDraft(args); return { prepared: true, message: "草稿已准备，用户点击进入表单后检查；尚未提交报告", fields: staged.reportDraft.fields }; }
+          if (name === "prepare_report_draft") {
+            if (!args || typeof args !== "object" || Array.isArray(args) || Object.keys(args).length) throw Error("整理工具不接受事件字段，请用空参数请求原话核对");
+            stream?.status("正在提取并核对用户原话…");
+            staged.reportReview ||= await prepareReview(s, model, operation.controller.signal);
+            return { prepared: true, requiresConfirmation: true, candidateCount: staged.reportReview.candidates.length, message: "仅生成待核对信息，不代表已核实；用户逐项确认后才能填写表单，尚未提交报告", fixedFields: staged.reportReview.fixedFields };
+          }
           if (name === "web_search") { stream?.status("正在联网检索 · 中等…"); const result = await webSearch(args.query, operation.controller.signal); staged.sources = result.results; staged.searchNote = result.note; return result; }
           if (name === "remember_user_preference") { if (!/记住|记忆|以后.*(?:回答|称呼|使用)/.test(operation.userMessage.content)) throw Error("用户未明确要求保存长期记忆"); if (typeof args.preference !== "string" || !args.preference.trim() || args.preference.length > 500 || /\d{7,}|sk-|@|姓名|住址|地址|身份证|电话|手机号|密钥|密码|token|api.?key|邮箱|我叫|名叫|门牌|银行卡|学号|住在/i.test(args.preference)) throw Error("仅保存不含身份信息或秘密的稳定偏好"); staged.preference = args.preference.trim(); return { remembered: true, preference: staged.preference }; }
           throw Error("未知工具");
@@ -170,7 +186,7 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
           try {
             const result = await runTool(name, args);
             const warning = !!result.error || name === "web_search" && result.mode !== "web-search";
-            const detail = name === "web_search" ? (result.error ? "联网检索不可用，未取得可用来源" : warning ? `检索降级，取得 ${result.results?.length || 0} 条内置官方来源` : `取得 ${result.results.length} 条参考来源`) : name === "prepare_report_draft" ? "草稿已整理，尚未提交报告" : "偏好已暂存，回答完成后保存";
+            const detail = name === "web_search" ? (result.error ? "联网检索不可用，未取得可用来源" : warning ? `检索降级，取得 ${result.results?.length || 0} 条内置官方来源` : `取得 ${result.results.length} 条参考来源`) : name === "prepare_report_draft" ? "已生成待核对信息，尚未写入表单或提交报告" : "偏好已暂存，回答完成后保存";
             operation.activity.update(step, warning ? "warning" : "done", detail);
             return result;
           } catch (e) {
@@ -188,7 +204,7 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
         const content = await complete(model, [{ role: "system", content: system + "\n" + identityContext(req) + `\n当前日期：${new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" })}` }, ...context], stream?.delta, { signal: operation.controller.signal, onProgress: operation.activity.model, ...(s.kind === "qa" ? { tools: chatTools, executeTool, onToolsUnsupported: () => { staged.toolsUnsupported = true; } } : {}) });
         if (operation.controller.signal.aborted) throw Error("生成已停止");
         s.messages.push({ role: "assistant", content, origin: "ai", model, time: now(), activity: operation.activity.finish(), ...(staged.sources.length ? { sources: staged.sources, searchNote: staged.searchNote } : {}) }); s.updatedAt = now(); s.lastCompletedRequestId = operation.id;
-        if (staged.reportDraft) s.reportDraft = staged.reportDraft;
+        if (staged.reportReview) { s.reportReview = staged.reportReview; delete s.reportDraft; }
         if (staged.toolsUnsupported) s.toolsUnsupported = true;
         if (staged.preference) { const previous = userMemory(db, owner).longTerm; setLongTerm(db, owner, previous.includes(staged.preference) ? previous : [previous, staged.preference].filter(Boolean).join("\n")); }
         if (s.kind === "qa") rememberExchange(db, s, owner);

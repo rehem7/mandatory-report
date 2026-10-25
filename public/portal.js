@@ -7,6 +7,7 @@ import { listDrafts, getDraft, saveDraft, removeDraft, syncDrafts, flushDrafts }
 import { art, banner, emptyArtwork, artCredit, installVisuals } from "/visual.js";
 import { activityHTML } from "/activity-view.js";
 import { renderMarkdown } from "/markdown.js";
+import { reviewReport } from "/report-review.js";
 const $ = id => document.getElementById(id);
 let page = location.pathname.slice(1) || "ask";
 const main = $("portal-main");
@@ -172,7 +173,7 @@ async function streamSession(path, payload, kind = "message") {
   clearStream(); return result;
 }
 function messagesHTML(s) {
-  return s.messages.map(m => `<div class="message ${m.role === "user" ? "user" : "assistant"}"><span class="message-avatar">${m.role === "user" ? "我" : modelImage(m.model || s.model, 28, true)}</span><div class="message-body">${m.role === "assistant" ? activityHTML(m.activity) : ""}<div class="message-text">${text(m.content)}</div>${m.sources?.length ? `<div class="message-sources"><span>联网参考 · 中等范围</span>${m.sources.map(source => `<a href="${esc(source.url)}" target="_blank" rel="noopener noreferrer">${esc(source.title)} ↗</a>`).join("")}<p>${esc(m.searchNote || "")}</p></div>` : ""}<div class="message-meta">${m.origin === "scenario" ? "练习情景 · 角色开场" : m.role === "user" ? "我的提问" : "AI · " + esc(modelName(m.model || s.model))} · ${time(m.time)}</div></div></div>`).join("") + (s.kind === "qa" && s.reportDraft ? `<section class="chat-report-action"><div><strong>已根据对话整理报告草稿</strong><p>${esc(s.reportDraft.fields.description.slice(0, 100))}</p><small>未知信息留空；进入表单后请核对，尚未提交。</small></div><button type="button" class="primary mini" data-open-report="${esc(s.id)}">检查并填写报告 ↗</button></section>` : "");
+  return s.messages.map(m => `<div class="message ${m.role === "user" ? "user" : "assistant"}"><span class="message-avatar">${m.role === "user" ? "我" : modelImage(m.model || s.model, 28, true)}</span><div class="message-body">${m.role === "assistant" ? activityHTML(m.activity) : ""}<div class="message-text">${text(m.content)}</div>${m.sources?.length ? `<div class="message-sources"><span>联网参考 · 中等范围</span>${m.sources.map(source => `<a href="${esc(source.url)}" target="_blank" rel="noopener noreferrer">${esc(source.title)} ↗</a>`).join("")}<p>${esc(m.searchNote || "")}</p></div>` : ""}<div class="message-meta">${m.origin === "scenario" ? "练习情景 · 角色开场" : m.role === "user" ? "我的提问" : "AI · " + esc(modelName(m.model || s.model))} · ${time(m.time)}</div></div></div>`).join("") + (s.kind === "qa" && s.reportReview ? `<section class="chat-report-action"><div><strong>AI 已提取待核对信息</strong><p>${s.reportReview.candidates.length} 项候选信息，逐项对照原话并确认后才能填写表单。</p><small>转述与推测单独标注，未知留空，尚未提交。</small></div><button type="button" class="primary mini" data-open-report="${esc(s.id)}">核对信息并填写表单 ↗</button></section>` : s.kind === "qa" && s.reportDraft && !s.reportDraft.confirmation ? `<section class="chat-report-action"><div><strong>旧草稿需要重新核对</strong><p>请使用顶部“从对话整理报告”重新提取原话，再确认填写。</p></div></section>` : "");
 }
 function composer() { return `<form id="chat-form" class="chat-composer"><label for="chat-input" class="visually-hidden">输入对话内容</label><textarea id="chat-input" rows="1" maxlength="4000" placeholder="描述您的问题；请不要提供真实未成年人的个人信息…"></textarea><div class="composer-bottom"><span>Enter 发送 · Shift + Enter 换行<br>对话会保存到“我的记录”</span><button id="chat-send" class="primary" type="submit">发送 <span aria-hidden="true">↑</span></button></div></form>`; }
 function chatCard(training = false) {
@@ -261,7 +262,7 @@ async function sendMessage(retry = false) {
   try {
     if (!current) { current = await post("/api/sessions", { kind: "qa", learnerId: learnerId(), model: selected }); replacePortalURL("/ask?session=" + current.id); }
     beforeCount = current.messages.length;
-    if (!retry) { current.messages.push({ role: "user", content, time: new Date().toISOString() }); $("chat-input").value = ""; }
+    if (!retry) { current.messages.push({ role: "user", content, time: new Date().toISOString() }); delete current.reportReview; $("chat-input").value = ""; }
     updateChat();
     const result = await streamSession(`/api/sessions/${current.id}/${retry ? "reply" : "messages"}`, { learnerId: learnerId(), model: selected, content });
     if (!stopRequested) { current = result; if (result.stopped) { $("chat-input").value = result.restore?.content || outgoingText; clearStream(); } }
@@ -296,6 +297,11 @@ async function openMemory() {
   $("memory-long-term").value = memory.longTerm;
   $("memory-short-term").innerHTML = memory.shortTerm.length ? memory.shortTerm.slice().reverse().map(item => `<div class="memory-item"><strong>${esc(item.question)}</strong><p>${esc(item.answer.slice(0, 250))}</p><small>${time(item.updatedAt)}</small></div>`).join("") : `<p class="muted">还没有近期对话记忆。完成问答后会自动保存。</p>`;
   openDialog($("memory-dialog"));
+}
+async function openReportReview(value, sessionId) {
+  if (value?.version !== 1) throw Error("请重新整理对话后核对");
+  const draft = await reviewReport(value, selection => post(`/api/sessions/${sessionId}/report-confirm`, selection));
+  if (draft) await openReportDraft(draft);
 }
 async function openReportDraft(value) {
   const existing = getDraft(learnerId(), value.id);
@@ -395,12 +401,12 @@ main.onclick = async e => {
   try {
     if (button.dataset.question) { $("chat-input").value = button.dataset.question; resizeComposer(); $("chat-input").focus(); }
     else if (button.hasAttribute("data-open-memory")) await openMemory();
-    else if (button.dataset.openReport) { if (generating) return toast("请先停止或等待当前回复"); const s = current?.id === button.dataset.openReport ? current : await sessionGet(button.dataset.openReport); if (!s.reportDraft) return toast("尚未准备好报告草稿"); await openReportDraft(s.reportDraft); }
+    else if (button.dataset.openReport) { if (generating) return toast("请先停止或等待当前回复"); const s = await sessionGet(button.dataset.openReport); if (!s.reportReview) return toast("请重新整理对话后核对"); await openReportReview(s.reportReview, s.id); }
     else if (button.hasAttribute("data-build-report")) {
       if (generating) return toast("请先停止或等待当前回复");
       if (!current?.messages.some(m => m.role === "user")) return toast("请先在对话中描述需要报告的情况");
       generating = true; streamingKind = "draft"; button.disabled = true; button.textContent = "正在整理草稿…"; updateChat();
-      try { const value = await post(`/api/sessions/${current.id}/report-draft`, { learnerId: learnerId(), model: model() }); await openReportDraft(value); }
+      try { const sessionId = current.id; const value = await post(`/api/sessions/${sessionId}/report-draft`, { learnerId: learnerId(), model: model() }); current.reportReview = value; delete current.reportDraft; await openReportReview(value, sessionId); }
       finally { generating = false; streamingKind = "message"; if (button.isConnected) { button.disabled = false; button.textContent = "从对话整理报告 ↗"; updateChat(); } }
     }
     else if (button.dataset.session) { if (generating) return toast("请等待回复完成"); openQA(await sessionGet(button.dataset.session)); }

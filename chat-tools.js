@@ -6,7 +6,7 @@ const fallbackSources = [...sources,
 ];
 export const reportTypes = ["身体虐待", "性侵害", "情感/精神虐待", "忽视/疏于照料", "家庭暴力", "暴力伤害", "拐卖", "遗弃", "组织乞讨", "自杀/自残", "其他"];
 export const chatTools = [
-  { type: "function", function: { name: "prepare_report_draft", description: "根据用户本人提供的案例事实准备报告草稿，供用户点击后进入报告表单检查；不提交报告。存在可描述的线索且用户希望报告时可调用，未知字段留空，不编造。", parameters: { type: "object", properties: { identity: { type: "string", enum: ["未成年本人", "家长/监护人", "教师/教育工作者", "医护人员", "社区工作人员", "其他", ""] }, identityOther: { type: "string" }, types: { type: "array", items: { type: "string", enum: reportTypes } }, typeOther: { type: "string" }, region: { type: "string" }, address: { type: "string" }, occurredAt: { type: "string", description: "用户明确提供的当地时间，格式 YYYY-MM-DDTHH:mm；不明时留空" }, age: { type: "string", enum: ["0-6岁", "7-13岁", "14-17岁", "18岁以上", ""] }, description: { type: "string", description: "根据用户陈述整理事实，区分待核实内容" } }, required: ["description", "types"] } } },
+  { type: "function", function: { name: "prepare_report_draft", description: "用户已描述本次事件且希望报告时，请求整理待核对信息。无需提供事件字段；服务端只从本会话用户原话独立提取并校验。用户必须逐项确认后才能写入表单；不提交报告。", parameters: { type: "object", properties: {}, additionalProperties: false } } },
   { type: "function", function: { name: "web_search", description: "联网查找案例或报告制度资料。中等范围：最多5条结果和官方来源摘录；使用泛化关键词，不能发送个人姓名、电话或地址。当前日期由系统提供；引用结果注明来源，失败不可声称已检索。", parameters: { type: "object", properties: { query: { type: "string", description: "概括性检索关键词" } }, required: ["query"] } } },
   { type: "function", function: { name: "remember_user_preference", description: "仅在用户明确说请记住、以后记住等时保存稳定的岗位背景或回答偏好；不保存案例当事人的身份、住址、电话、图片或秘密。", parameters: { type: "object", properties: { preference: { type: "string" } }, required: ["preference"] } } }
 ];
