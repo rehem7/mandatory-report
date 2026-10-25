@@ -1,5 +1,6 @@
 import { api } from "/common.js";
 import { accountState } from "/account.js";
+import { fileToAttachment, validateFiles } from "/attachment-policy.js";
 const storageKey = owner => `reportDrafts:v1:${owner}`;
 const activeKey = owner => `activeReportDraft:v1:${owner}`;
 const pending = new Map(), work = new Map(), revisions = new Map(), blocked = new Map();
@@ -21,9 +22,9 @@ export async function syncDrafts(owner) {
   if (!cloud(owner)) return;
   await flushDrafts(owner);
   const drafts = await api("/api/drafts");
-  for (const local of listDrafts(owner).filter(d => d._dirty)) {
+  for (const local of listDrafts(owner).filter(d => d._dirty || d._attachmentsDirty)) {
     const index = drafts.findIndex(d => d.id === local.id), remote = drafts[index], key = owner + ":" + local.id;
-    if (remote && sameContent(local, remote)) continue;
+    if (remote && sameContent(local, remote) && !local._attachmentsDirty) continue;
     // Preserve edits made while GET was in flight, including edits in another tab.
     if ((!remote && !local.revision) || remote?.revision === local.revision) { if (index < 0) drafts.unshift(local); else drafts[index] = local; queueDraft(owner, local); }
     else {
@@ -87,18 +88,19 @@ function openDatabase() {
     request.onerror = () => reject(request.error);
   }).catch(error => { database = null; throw error; });
 }
-export async function storeAttachment(owner, id, file) {
-  await storeLocalAttachment(owner, id, file);
+export async function storeAttachment(owner, id, file) { return storeAttachments(owner, id, file ? [file] : []); }
+export async function storeAttachments(owner, id, files, version = getDraft(owner, id)?._attachmentVersion) {
+  validateFiles(files);
+  await storeLocalAttachment(owner, id, files.length ? files : null);
   if (cloud(owner)) {
     await flushDrafts(owner);
-    const data = file ? await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(",")[1]); reader.onerror = reject; reader.readAsDataURL(file); }) : null;
-    const mime = file?.type || ({ txt: "text/plain", pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", mp4: "video/mp4" }[file?.name.split(".").pop().toLowerCase()] || "");
+    const attachments = await Promise.all(files.map(fileToAttachment));
     const key = owner + ":" + id;
     const promise = (work.get(key) || Promise.resolve()).catch(() => {}).then(async () => {
       if (blocked.has(key)) throw blocked.get(key);
-      const saved = await api("/api/drafts/" + id + "/attachment", { method: "PUT", body: JSON.stringify({ revision: revisions.get(key) || 0, attachment: file ? { name: file.name, mime, data } : null }) });
+      const saved = await api("/api/drafts/" + id + "/attachments", { method: "PUT", body: JSON.stringify({ revision: revisions.get(key) || 0, attachments }) });
       revisions.set(key, saved.revision);
-      const drafts = listDrafts(owner), local = drafts.find(d => d.id === id); if (local) { local.revision = saved.revision; local.attachmentName = saved.attachmentName; localStorage.setItem(storageKey(owner), JSON.stringify(drafts)); }
+      const drafts = listDrafts(owner), local = drafts.find(d => d.id === id); if (local) { local.revision = saved.revision; if (local._attachmentVersion === version) local._attachmentsDirty = false; localStorage.setItem(storageKey(owner), JSON.stringify(drafts)); }
     }).catch(error => { if ([409, 410].includes(error.status)) blocked.set(key, error); throw error; });
     work.set(key, promise);
     promise.finally(() => { if (work.get(key) === promise) work.delete(key); }).catch(() => {});
@@ -114,16 +116,16 @@ async function storeLocalAttachment(owner, id, file) {
     transaction.onabort = transaction.onerror = () => reject(transaction.error || Error("附件保存失败"));
   });
 }
-export async function loadAttachment(owner, id) {
-  if (cloud(owner)) {
-    const value = await api("/api/drafts/" + id + "/attachment");
-    if (!value) return null;
-    return new File([Uint8Array.from(atob(value.data), c => c.charCodeAt(0))], value.name, { type: value.mime });
+export async function loadAttachment(owner, id) { return (await loadAttachments(owner, id))[0] || null; }
+export async function loadAttachments(owner, id) {
+  if (cloud(owner) && !getDraft(owner, id)?._attachmentsDirty) {
+    const values = await api("/api/drafts/" + id + "/attachments");
+    return values.map(value => new File([Uint8Array.from(atob(value.data), c => c.charCodeAt(0))], value.name, { type: value.mime }));
   }
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     const request = db.transaction("files").objectStore("files").get(`${owner}:${id}`);
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : request.result ? [request.result] : []);
     request.onerror = () => reject(request.error);
   });
 }

@@ -51,3 +51,20 @@ test("版本冲突保留本机编辑并阻止旧页面继续覆盖", async () =>
   assert.equal(puts, 1);
   assert.equal(context.listDrafts(owner)[0].fields.description, "本页继续编辑");
 });
+
+test("字段已同步但附件尚在上传时，刷新同步不会丢弃本机附件列表", async () => {
+  let remote;
+  const { context } = client(async (_url, options) => {
+    if (!options) return [remote];
+    const value = JSON.parse(options.body);
+    remote = { id: value.id, fields: value.fields, scrollY: value.scrollY, revision: (remote?.revision || 0) + 1, attachmentNames: [] };
+    return remote;
+  });
+  context.saveDraft(owner, { ...draft('已有文字内容'), attachmentNames: ['照片.png', '录音.m4a'], _attachmentsDirty: true, _attachmentVersion: 'pending-files' });
+  await context.flushDrafts(owner);
+  assert.equal(context.listDrafts(owner)[0]._dirty, false);
+  await context.syncDrafts(owner);
+  const local = context.listDrafts(owner)[0];
+  assert.deepEqual(Array.from(local.attachmentNames), ['照片.png', '录音.m4a']);
+  assert.equal(local._attachmentsDirty, true);
+});

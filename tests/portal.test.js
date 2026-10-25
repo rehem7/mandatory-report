@@ -30,7 +30,7 @@ test("真实协议代理、失败重试、实训评分、记录归属、单位�
   try {
     const registration = await call("/api/auth/register", { email: "teacher@example.test", identity: "教师/教育工作者" });
     const unitPath = "/api/units/" + encodeURIComponent(registration.data.profile.unitId);
-    const catalog = (await call("/api/portal/catalog")).data; assert.equal(catalog.cases.length, 5); assert.ok(catalog.cases.every(c => c.fictional && !c.facts && !c.expectedRisk));
+    const catalog = (await call("/api/portal/catalog")).data; assert.equal(catalog.cases.length, 9); assert.ok(catalog.cases.every(c => c.fictional && !c.facts && !c.expectedRisk));
     const config = (await call("/api/ai/config")).data; assert.equal(config.models.length, 3); assert.equal(config.defaultModel, chosen); assert.ok(!JSON.stringify(config).includes(process.env.FREE_API_KEY));
     assert.equal((await call("/api/sessions", { learnerId: "public", kind: "qa", model: "fake" })).status, 400);
     const qa = (await call("/api/sessions", { learnerId: "public", kind: "qa", model: chosen })).data;

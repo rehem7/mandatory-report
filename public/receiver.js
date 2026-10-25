@@ -129,6 +129,10 @@ function describeAction(action) {
 }
 function helpHistory(r) { return r.helpRecords.map(h => `<div class="timeline-record"><p class="detail-text">${esc(h.note)}</p><div class="muted">${esc(h.department)} · ${time(h.time)}</div></div>`).join("") || `<p class="muted">暂无帮扶记录</p>`; }
 function supervision(r) { return r.supervision.map(s => `<div class="timeline-record"><span class="badge red">${esc(s.reason)}</span><div class="muted">推送于 ${time(s.time)}</div></div>`).join(""); }
+function evidenceLinks(r) {
+  const files = Array.isArray(r.attachments) ? r.attachments : r.attachment ? [r.attachment] : [];
+  return files.length ? `<div class="evidence-links">${files.map((file, index) => `<a class="attachment-link" href="/api/reports/${encodeURIComponent(r.id)}/attachments/${index}">${icon('file')}<span>${esc(file.name)}<small>${esc(file.mime)}${Number.isFinite(file.size) ? ' · ' + (file.size / 1024 / 1024).toFixed(2) + ' MB' : ''}</small></span><span aria-hidden="true">↓</span></a>`).join('')}</div>` : '<p class="muted">未上传附件</p>';
+}
 
 function policeDetail(r) {
   const next = transitions[r.status] || [];
@@ -138,7 +142,7 @@ function policeDetail(r) {
       ${meta("上报身份", esc(r.identity) + (r.identityOther ? " · " + esc(r.identityOther) : ""))}${meta("受害人年龄", esc(r.age))}
       ${meta("事件类型", r.types.map(esc).join("、") + (r.typeOther ? " · " + esc(r.typeOther) : ""), true)}
       ${meta("事件发生时间", time(r.occurredAt), true)}${meta("地点", esc(r.region) + " " + esc(r.address), true)}
-    </dl><h4>事件描述</h4><p class="detail-text">${esc(r.description)}</p><h4>上报人信息 <span class="badge subtle">${r.anonymous ? "匿名报告" : "已提供身份信息"}</span></h4><dl class="metadata">${meta("姓名", esc(r.reporter.name || "未提供"))}${meta("工作单位", esc(r.reporter.organization || "未提供"))}${meta("联系电话", esc(r.reporter.phone || "未提供，无法联系补充信息"), true)}</dl><h4>证据材料</h4>${r.attachment ? `<a class="attachment-link" href="/api/reports/${encodeURIComponent(r.id)}/attachment">${icon("file")}<span>${esc(r.attachment.name)}</span><span aria-hidden="true">↓</span></a>` : '<p class="muted">未上传附件</p>'}<h4>义务主体提示</h4><p class="muted">${r.obligated ? "疑似报告义务主体，需结合具体身份核实。" : "需结合具体身份核实是否属于报告义务主体。"}</p>${r.helpRecords.length ? `<h4>帮扶回传记录</h4>${helpHistory(r)}` : ""}${r.supervision.length ? `<div class="supervision-note"><h4>已推送检察监督</h4>${supervision(r)}</div>` : ""}</section>
+    </dl><h4>事件描述</h4><p class="detail-text">${esc(r.description)}</p><h4>上报人信息 <span class="badge subtle">${r.anonymous ? "匿名报告" : "已提供身份信息"}</span></h4><dl class="metadata">${meta("姓名", esc(r.reporter.name || "未提供"))}${meta("工作单位", esc(r.reporter.organization || "未提供"))}${meta("联系电话", esc(r.reporter.phone || "未提供，无法联系补充信息"), true)}</dl><h4>证据材料</h4>${evidenceLinks(r)}<h4>义务主体提示</h4><p class="muted">${r.obligated ? "疑似报告义务主体，需结合具体身份核实。" : "需结合具体身份核实是否属于报告义务主体。"}</p>${r.helpRecords.length ? `<h4>帮扶回传记录</h4>${helpHistory(r)}` : ""}${r.supervision.length ? `<div class="supervision-note"><h4>已推送检察监督</h4>${supervision(r)}</div>` : ""}</section>
     <section class="case-card"><h3>研判与处置</h3><div class="summary"><span class="badge">规则建议</span><span class="badge ${r.ai.risk === "高" ? "red" : r.ai.risk === "中" ? "amber" : "subtle"}">${esc(r.ai.risk)}风险</span>${riskTags(r)}<strong>建议 ${esc(r.ai.tag)} 类 · ${labels[r.ai.tag]}</strong><p>${esc(r.ai.reason)}</p><p><b>报告信号：</b>${esc(r.ai.threshold || "需人工核实是否存在疑似侵害或危险")}</p><p><b>疑似侵害：</b>${esc(r.ai.infringement || r.types.join("、"))}</p><p><b>证据建议：</b><br>${r.ai.evidence.map(esc).join("<br>")}</p><p class="muted">规则建议需人工复核，不构成法律意见。</p></div>
       <div class="review-state"><span class="muted">人工确认</span><span class="badge ${r.confirmedTag ? "" : "subtle"}">${r.confirmedTag ? `${r.confirmedTag} · ${labels[r.confirmedTag]}` : "尚未复核"}</span></div>
       <label class="field"><span>复核依据 / 处置记录 <b class="required">*</b></span><textarea id="note" placeholder="填写本次操作依据；分流时填写可共享的脱敏帮扶摘要"></textarea></label>

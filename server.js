@@ -8,6 +8,8 @@ import { attachActor, handleAuth } from "./auth.js";
 import { handleDrafts } from "./draft-api.js";
 import { staticFiles } from "./static-files.js";
 import { gzipSync } from "node:zlib";
+import { MAX_BODY_BYTES, attachmentsOf, attachmentMetadata, normalizeAttachments } from "./attachments.js";
+import { resolveRegion } from "./public/regions.js";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const serveStatic = staticFiles(root);
 const dir = process.env.DATA_DIR || path.join(root, "data");
@@ -40,7 +42,7 @@ function supervise() {
   if (changed) save();
 }
 function view(r, role) {
-  if (role === "公安") return { ...r, attachment: r.attachment ? { name: r.attachment.name, mime: r.attachment.mime } : null };
+  if (role === "公安") { const { attachment, attachments, ...report } = r; const files = attachmentMetadata(attachmentsOf(r)); return { ...report, attachments: files, attachment: files[0] || null }; }
   if (role === "检察院") return { id: r.id, receivedAt: r.receivedAt, status: r.status, supervision: r.supervision };
   return { id: r.id, types: r.types, age: r.age, region: r.region, occurredAt: r.occurredAt, description: r.helpSummary, status: r.status, department: r.department, helpRecords: r.helpRecords, receivedAt: r.receivedAt };
 }
@@ -51,7 +53,7 @@ function reply(res, status, value) {
   if (payload.length > 1024 && /(?:^|,)\s*gzip\s*(?:,|$)/.test(res.req.headers["accept-encoding"] || "")) { payload = gzipSync(payload); headers["Content-Encoding"] = "gzip"; }
   res.writeHead(status, headers); res.end(payload);
 }
-async function body(req) { let chunks = []; let size = 0; for await (const c of req) { size += c.length; if (size > 15 * 1024 * 1024) throw new Error("请求过大，附件最多10MB"); chunks.push(c); } return JSON.parse(Buffer.concat(chunks).toString() || "{}"); }
+async function body(req) { let chunks = []; let size = 0; for await (const c of req) { size += c.length; if (size > MAX_BODY_BYTES) throw Object.assign(Error("请求过大，附件合计不能超过50MB"), { status: 413 }); chunks.push(c); } return JSON.parse(Buffer.concat(chunks).toString() || "{}"); }
 export const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
@@ -69,31 +71,30 @@ export const server = http.createServer(async (req, res) => {
       if (url.pathname === "/api/assess" && req.method === "POST") return reply(res, 200, assess(await body(req)));
       if (url.pathname === "/api/reports" && req.method === "POST") {
         const b = await body(req);
+        const location = Object.hasOwn(b, 'regionCodes') ? resolveRegion(b.regionCodes) : null;
+        if (location) b.region = location.label;
         if (req.actor.authenticated) { b.identity = req.actor.user.identity; b.identityOther = req.actor.user.identityOther; }
         if (!b.consent || required.some(k => typeof b[k] !== "string" || !b[k].trim()) || !Array.isArray(b.types) || !b.types.length || b.types.some(t => typeof t !== "string") || !Number.isFinite(Date.parse(b.occurredAt))) return reply(res, 400, { error: "请填写全部必填项并确认重要提示" });
         if (b.identity === "其他" && !b.identityOther?.trim() || b.types.includes("其他") && !b.typeOther?.trim()) return reply(res, 400, { error: "请补充其他身份或事件说明" });
-        let attachment = null;
-        if (b.attachment) {
-          const a = b.attachment;
-          if (typeof a.data !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(a.data) || !a.name || !["image/png", "image/jpeg", "image/webp", "video/mp4", "application/pdf", "text/plain"].includes(a.mime)) return reply(res, 400, { error: "附件支持PNG、JPG、WebP、MP4、PDF、TXT" });
-          if (Buffer.from(a.data, "base64").length > 10 * 1024 * 1024) return reply(res, 400, { error: "附件最多10MB" });
-          attachment = { name: String(a.name).slice(0, 200), mime: a.mime, data: a.data };
-        }
+        const attachments = normalizeAttachments(b);
         const now = new Date(); const id = "CL-" + now.toISOString().slice(0,10).replaceAll("-", "") + "-" + crypto.randomBytes(3).toString("hex").toUpperCase(); const receipt = crypto.randomBytes(24).toString("hex");
-        const r = { id, receipt, ...Object.fromEntries(required.map(k => [k, b[k].trim().slice(0, 10000)])), identityOther: b.identityOther || "", typeOther: b.typeOther || "", types: b.types, reporter: { name: b.reporter?.name || "", organization: b.reporter?.organization || "", phone: b.reporter?.phone || "" }, anonymous: !b.reporter?.name?.trim() && !b.reporter?.phone?.trim(), obligated: ["教师/教育工作者", "医护人员", "社区工作人员"].includes(b.identity), attachment, receivedAt: now.toISOString(), deadline: new Date(now.getTime() + 86400000).toISOString(), ai: assess(b), confirmedTag: null, status: "待受理", department: null, helpSummary: "", helpRecords: [], supervision: [] };
+        const r = { id, receipt, ...Object.fromEntries(required.map(k => [k, b[k].trim().slice(0, 10000)])), identityOther: b.identityOther || "", typeOther: b.typeOther || "", types: b.types, reporter: { name: b.reporter?.name || "", organization: b.reporter?.organization || "", phone: b.reporter?.phone || "" }, anonymous: !b.reporter?.name?.trim() && !b.reporter?.phone?.trim(), obligated: ["教师/教育工作者", "医护人员", "社区工作人员"].includes(b.identity), attachments, receivedAt: now.toISOString(), deadline: new Date(now.getTime() + 86400000).toISOString(), ai: assess(b), confirmedTag: null, status: "待受理", department: null, helpSummary: "", helpRecords: [], supervision: [] };
+        if (location) r.regionCodes = location.codes;
         r.ownerId = req.actor.ownerId;
         db.reports.unshift(r); log("公众", "提交线索，接收工作台开始24小时计时", id); return reply(res, 201, { id, receipt, receivedAt: r.receivedAt, status: r.status });
       }
       if (url.pathname === "/api/receipt" && req.method === "POST") { const b = await body(req); const r = db.reports.find(r => r.id === b.id && r.receipt === b.receipt); return r ? reply(res, 200, { id: r.id, status: r.status, receivedAt: r.receivedAt }) : reply(res, 404, { error: "记录不存在或查询凭证不正确" }); }
       if (url.pathname === "/api/reports" && req.method === "GET") { const reports = db.reports.filter(r => accessible(r, role)).map(r => view(r, role)); log(role, "查看线索列表", null); return reply(res, 200, reports); }
       if (url.pathname === "/api/logs" && req.method === "GET") return role === "公安" ? reply(res, 200, db.logs.slice(-200).reverse()) : reply(res, 403, { error: "仅公安可查看全量日志" });
-      const match = url.pathname.match(new RegExp("^/api/reports/([^/]+)(?:/(attachment|action))?$"));
+      const match = url.pathname.match(new RegExp("^/api/reports/([^/]+)(?:/(attachment|attachments/([0-9]+)|action))?$"));
       if (match) {
         const r = db.reports.find(r => r.id === match[1]);
         if (!r || !accessible(r, role)) return reply(res, 404, { error: "线索不存在或当前部门无权查看" });
-        if (match[2] === "attachment" && req.method === "GET") {
-          if (role !== "公安" || !r.attachment) return reply(res, 403, { error: "无权查看附件" });
-          log(role, "查看附件", r.id); res.writeHead(200, { "Content-Type": r.attachment.mime, "X-Content-Type-Options": "nosniff", "Content-Disposition": "attachment; filename*=UTF-8''" + encodeURIComponent(r.attachment.name) }); return res.end(Buffer.from(r.attachment.data, "base64"));
+        if ((match[2] === "attachment" || match[3] !== undefined) && req.method === "GET") {
+          if (role !== "公安") return reply(res, 403, { error: "无权查看附件" });
+          const file = attachmentsOf(r)[match[3] === undefined ? 0 : Number(match[3])];
+          if (!file) return reply(res, 404, { error: "附件不存在" });
+          log(role, "查看附件：" + file.name, r.id); res.writeHead(200, { "Content-Type": file.mime, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": "attachment; filename*=UTF-8''" + encodeURIComponent(file.name) }); return res.end(Buffer.from(file.data, "base64"));
         }
         if (match[2] === "action" && req.method === "POST") {
           const b = await body(req); const note = typeof b.note === "string" ? b.note.trim().slice(0, 10000) : "";
