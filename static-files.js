@@ -12,7 +12,7 @@ for (const name of ['children-support.svg', 'children-learning.svg', 'children-r
 for (const name of ['guardian-question.png', 'guardian-confident.png', 'guardian-expressions.jpg']) routes.set('/assets/mascot/' + name, 'assets/mascot/' + name);
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.txt': 'text/plain; charset=utf-8', '.json': 'application/json; charset=utf-8' };
 for (const name of ['markdown.js', 'vendor/markdown-it.js', 'assets/visual/licenses/markdown-it.txt', 'assets/visual/licenses/markdown-it-cjk-friendly.txt', 'assets/visual/licenses/east-asian-width.txt']) routes.set('/' + name, name);
-for (const name of ['report-review.js', 'attachment-policy.js', 'region-data.js', 'regions.js', 'region-picker.js', 'help-tour.js', 'assets/visual/licenses/lcn.txt']) routes.set('/' + name, name);
+for (const name of ['accessibility.css', 'learning.js', 'chat-images.js', 'report-review.js', 'attachment-policy.js', 'region-data.js', 'regions.js', 'region-picker.js', 'help-tour.js', 'assets/visual/licenses/lcn.txt']) routes.set('/' + name, name);
 const digest = value => crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
 
 export function staticFiles(root) {

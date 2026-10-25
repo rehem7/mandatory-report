@@ -8,6 +8,10 @@ import { art, banner, emptyArtwork, artCredit, installVisuals } from "/visual.js
 import { activityHTML } from "/activity-view.js";
 import { renderMarkdown } from "/markdown.js";
 import { reviewReport } from "/report-review.js";
+import { mountLearning } from "/learning.js";
+let disposeLearning;
+import { chatImageTools, filesToChatImages, chatImagesHTML } from "/chat-images.js";
+let pendingChatImages = [], outgoingImages = [], checkingImages = false;
 const $ = id => document.getElementById(id);
 let page = location.pathname.slice(1) || "ask";
 const main = $("portal-main");
@@ -76,7 +80,7 @@ const disclaimer = `<div class="legal-notice">AI 仅供辅助参考，不构成�
 function picker() {
   let selected = localStorage.getItem("chosenModel") || config.defaultModel;
   if (!config.models.some(m => m.id === selected)) selected = config.defaultModel;
-  return `<div class="model-picker"><span class="model-picker-label">对话模型</span><input type="hidden" id="model-choice" value="${esc(selected)}"><button type="button" id="model-trigger" class="model-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="model-options">${modelImage(selected, 25)}<span id="model-current-name">${esc(modelName(selected))}</span><svg class="model-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7 5 5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div id="model-menu" class="model-menu" hidden><div class="model-menu-caption">选择对话模型</div><div id="model-options" role="listbox" aria-label="选择对话模型">${config.models.map(m => `<button type="button" role="option" class="model-option" data-model-id="${esc(m.id)}" aria-selected="${m.id === selected}" tabindex="-1">${modelImage(m.id, 26)}<span>${esc(m.name)}</span><span class="model-check" aria-hidden="true">✓</span></button>`).join("")}</div></div></div>`;
+  return `<div class="model-picker"><span class="model-picker-label">对话模型</span><input type="hidden" id="model-choice" value="${esc(selected)}"><button type="button" id="model-trigger" class="model-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="model-options">${modelImage(selected, 25)}<span id="model-current-name">${esc(modelName(selected))}</span><svg class="model-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7 5 5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div id="model-menu" class="model-menu" hidden><div class="model-menu-caption">选择对话模型</div><div id="model-options" role="listbox" aria-label="选择对话模型">${config.models.map(m => `<button type="button" role="option" class="model-option" data-model-id="${esc(m.id)}" aria-selected="${m.id === selected}" tabindex="-1">${modelImage(m.id, 26)}<span class="model-option-copy"><strong>${esc(m.name)}</strong><small>${esc(m.description)}</small><small>${esc(m.speedNote)}</small></span><span class="model-check" aria-hidden="true">✓</span></button>`).join("")}</div></div></div>`;
 }
 function intro(title, description, actions = "") { return `<div class="page-intro"><div><div class="eyebrow">强制报告 · 公众服务</div><h1>${title}</h1><p>${description}</p></div>${actions ? `<div class="intro-actions">${actions}</div>` : ""}</div>`; }
 function footer() { return `<div class="portal-footer"><span>强制报告智能体 · 让每一条线索被看见</span><div class="footer-links">${artCredit}<a href="/credits" target="_blank" rel="noopener">素材与致谢</a><span>${accountState.authenticated ? "记录随账号保存" : "访客记录 · 当前浏览器可见"}</span></div></div>`; }
@@ -86,6 +90,7 @@ function closeModelMenu(focus = false) {
   if (focus) $("model-trigger").focus();
 }
 function setModel(id, persist = true) {
+  if (current?.imageModelId && current.imageModelId !== id && current.messages.some(m => m.images?.length)) { if (persist) toast('本会话图片绑定原模型，换模型请先新建问答'); return; }
   if (!config.models.some(m => m.id === id)) id = config.defaultModel;
   if ($("model-choice")) {
     $("model-choice").value = id; $("model-current-name").textContent = modelName(id);
@@ -95,6 +100,7 @@ function setModel(id, persist = true) {
     for (const option of $("model-options").children) option.setAttribute("aria-selected", String(option.dataset.modelId === id));
   }
   if (persist) localStorage.setItem("chosenModel", id);
+  if ($("chat-send")) updateChatControls();
 }
 function bindModel() {
   const trigger = $("model-trigger"), menu = $("model-menu"); if (!trigger) return;
@@ -173,11 +179,11 @@ async function streamSession(path, payload, kind = "message") {
   clearStream(); return result;
 }
 function messagesHTML(s) {
-  return s.messages.map(m => `<div class="message ${m.role === "user" ? "user" : "assistant"}"><span class="message-avatar">${m.role === "user" ? "我" : modelImage(m.model || s.model, 28, true)}</span><div class="message-body">${m.role === "assistant" ? activityHTML(m.activity) : ""}<div class="message-text">${text(m.content)}</div>${m.sources?.length ? `<div class="message-sources"><span>联网参考 · 中等范围</span>${m.sources.map(source => `<a href="${esc(source.url)}" target="_blank" rel="noopener noreferrer">${esc(source.title)} ↗</a>`).join("")}<p>${esc(m.searchNote || "")}</p></div>` : ""}<div class="message-meta">${m.origin === "scenario" ? "练习情景 · 角色开场" : m.role === "user" ? "我的提问" : "AI · " + esc(modelName(m.model || s.model))} · ${time(m.time)}</div></div></div>`).join("") + (s.kind === "qa" && s.reportReview ? `<section class="chat-report-action"><div><strong>AI 已提取待核对信息</strong><p>${s.reportReview.candidates.length} 项候选信息，逐项对照原话并确认后才能填写表单。</p><small>转述与推测单独标注，未知留空，尚未提交。</small></div><button type="button" class="primary mini" data-open-report="${esc(s.id)}">核对信息并填写表单 ↗</button></section>` : s.kind === "qa" && s.reportDraft && !s.reportDraft.confirmation ? `<section class="chat-report-action"><div><strong>旧草稿需要重新核对</strong><p>请使用顶部“从对话整理报告”重新提取原话，再确认填写。</p></div></section>` : "");
+  return s.messages.map(m => `<div class="message ${m.role === "user" ? "user" : "assistant"}"><span class="message-avatar">${m.role === "user" ? "我" : modelImage(m.model || s.model, 28, true)}</span><div class="message-body">${m.role === "assistant" ? activityHTML(m.activity) : ""}<div class="message-text">${text(m.content)}${m.images?.length ? `<ul class="chat-message-images">${chatImagesHTML(m.images)}</ul>` : ""}</div>${m.sources?.length ? `<div class="message-sources"><span>联网参考 · 中等范围</span>${m.sources.map(source => `<a href="${esc(source.url)}" target="_blank" rel="noopener noreferrer">${esc(source.title)} ↗</a>`).join("")}<p>${esc(m.searchNote || "")}</p></div>` : ""}<div class="message-meta">${m.origin === "scenario" ? "练习情景 · 角色开场" : m.role === "user" ? "我的提问" : "AI · " + esc(modelName(m.model || s.model))} · ${time(m.time)}</div></div></div>`).join("") + (s.kind === "qa" && s.reportReview ? `<section class="chat-report-action"><div><strong>AI 已提取待核对信息</strong><p>${s.reportReview.candidates.length} 项候选信息，逐项对照原话并确认后才能填写表单。</p><small>转述与推测单独标注，未知留空，尚未提交。</small></div><button type="button" class="primary mini" data-open-report="${esc(s.id)}">核对信息并填写表单 ↗</button></section>` : s.kind === "qa" && s.reportDraft && !s.reportDraft.confirmation ? `<section class="chat-report-action"><div><strong>旧草稿需要重新核对</strong><p>请使用顶部“从对话整理报告”重新提取原话，再确认填写。</p></div></section>` : "");
 }
-function composer() { return `<form id="chat-form" class="chat-composer"><label for="chat-input" class="visually-hidden">输入对话内容</label><textarea id="chat-input" rows="1" maxlength="4000" placeholder="描述您的问题；请不要提供真实未成年人的个人信息…"></textarea><div class="composer-bottom"><span>Enter 发送 · Shift + Enter 换行<br>对话会保存到“我的记录”</span><button id="chat-send" class="primary" type="submit">发送 <span aria-hidden="true">↑</span></button></div></form>`; }
+function composer(training = false) { return `<form id="chat-form" class="chat-composer"><label for="chat-input" class="visually-hidden">输入对话内容</label><textarea id="chat-input" rows="1" maxlength="4000" placeholder="描述您的问题；请不要提供真实未成年人的个人信息…"></textarea>${training ? "" : chatImageTools()}<div class="composer-bottom"><span>Enter 发送 · Shift + Enter 换行<br>对话会保存到“我的记录”</span><button id="chat-send" class="primary" type="submit">发送 <span aria-hidden="true">↑</span></button></div></form>`; }
 function chatCard(training = false) {
-  return `<section class="chat-card"><div class="chat-heading"><div><h2 id="chat-title">${training ? esc(data.cases.find(c => c.id === current.caseId).character) : "强制报告助手"}</h2><p id="chat-subtitle">${training ? "与AI角色沟通，逐步了解情形" : "围绕报告判断、证据留存与保护措施提问"}</p></div>${training ? "" : `<div class="qa-report-actions" aria-label="报告操作"><button type="button" class="primary" data-build-report>从对话整理报告 ↗</button><a class="secondary" href="/report">填写表单 ↗</a></div>`}</div>${training ? `<div class="training-case-note">${esc(data.cases.find(c => c.id === current.caseId).summary)}</div>` : ""}<div id="chat-messages" class="chat-messages" aria-live="polite"></div><div id="chat-retry" class="chat-retry" hidden></div>${composer()}</section>`;
+  return `<section class="chat-card"><div class="chat-heading"><div><h2 id="chat-title">${training ? esc(data.cases.find(c => c.id === current.caseId).character) : "强制报告助手"}</h2><p id="chat-subtitle">${training ? "与AI角色沟通，逐步了解情形" : "围绕报告判断、证据留存与保护措施提问"}</p></div>${training ? "" : `<div class="qa-report-actions" aria-label="报告操作"><button type="button" class="primary" data-build-report>从对话整理报告 ↗</button><a class="secondary" href="/report">填写表单 ↗</a></div>`}</div>${training ? `<div class="training-case-note">${esc(data.cases.find(c => c.id === current.caseId).summary)}</div>` : ""}<div id="chat-messages" class="chat-messages" aria-live="polite"></div><div id="chat-retry" class="chat-retry" hidden></div>${composer(training)}</section>`;
 }
 function updateChat() {
   if (!$("chat-messages")) return;
@@ -198,6 +204,7 @@ function updateChat() {
   if (reportButton) { reportButton.disabled = generating || !current?.messages.some(message => message.role === "user"); reportButton.title = reportButton.disabled && !generating ? "先描述具体情况，再整理报告草稿" : "整理后进入表单核对，不会直接提交"; }
   if (current?.kind === "qa") { $("chat-title").textContent = current.title; $("chat-subtitle").textContent = "当前模型 " + modelName(model()); }
   $("chat-messages").scrollTop = $("chat-messages").scrollHeight;
+  updateImageTools();
   resizeComposer();
 }
 let composerObserver;
@@ -219,12 +226,39 @@ function bindComposer() {
   let previousWidth = 0;
   composerObserver = new ResizeObserver(([entry]) => { if (entry.contentRect.width !== previousWidth) { previousWidth = entry.contentRect.width; resizeComposer(); } });
   composerObserver.observe($("chat-input"));
+  bindImageTools();
   resizeComposer();
 }
+function updateImageTools() {
+  if (!$("chat-image-list")) return;
+  const capable = config.models.find(m => m.id === model())?.imageSupport?.status === "verified";
+  $("model-trigger").disabled = generating || checkingImages;
+  $("chat-image-list").innerHTML = chatImagesHTML(pendingChatImages, true);
+  $("add-chat-image").disabled = generating || checkingImages || !capable;
+  $("check-image-model").disabled = generating || checkingImages;
+  $("check-image-model").textContent = checkingImages ? "正在检测…" : capable ? "重新检测图片支持" : "检测并启用图片";
+  $("chat-image-state").textContent = capable ? "图片已验证 · 最多3张，单张5MB，合计10MB" : "当前模型图片能力待验证";
+  if (pendingChatImages.length && !capable && !generating) $("chat-send").disabled = true;
+}
+function bindImageTools() {
+  if (!$("chat-image-input")) return;
+  $("add-chat-image").onclick = () => $("chat-image-input").click();
+  $("chat-image-input").onchange = async event => { const version = navigationVersion, target = pendingChatImages; try { const images = await filesToChatImages([...event.target.files], target); if (version === navigationVersion && target === pendingChatImages) pendingChatImages.push(...images); } catch (e) { toast(e.message); } finally { event.target.value = ""; updateChatControls(); } };
+  $("chat-image-list").onclick = event => { const button = event.target.closest('[data-remove-chat-image]'); if (button && !generating) { pendingChatImages.splice(Number(button.dataset.removeChatImage), 1); updateChatControls(); } };
+  $("check-image-model").onclick = async () => {
+    if (checkingImages || generating) return;
+    const chosen = model(), version = navigationVersion; checkingImages = true; updateImageTools();
+    try { const value = await post('/api/ai/image-check', { model: chosen }); config = value.config; if (version !== navigationVersion || !$("model-options")) return; setModel(chosen, false); for (const option of $("model-options").children) { const m = config.models.find(m => m.id === option.dataset.modelId); const notes = option.querySelectorAll('small'); if (notes[0]) notes[0].textContent = m.description; if (notes[1]) notes[1].textContent = m.speedNote; } toast(value.message); }
+    catch (e) { toast(e.message); }
+    finally { checkingImages = false; updateChatControls(); }
+  };
+  updateImageTools();
+}
+function updateChatControls() { if (!$("chat-send")) return; $("chat-send").disabled = generating || checkingImages || !!current?.lastError || current?.messages.at(-1)?.role === 'user'; updateImageTools(); resizeComposer(); }
 function resumeGeneration(s) {
   if (!s.busy) return;
   const version = ++pollVersion;
-  activeRequestId = s.generation?.id || null; outgoingText = s.messages.at(-1)?.role === "user" ? s.messages.at(-1).content : "";
+  activeRequestId = s.generation?.id || null; outgoingText = s.messages.at(-1)?.role === "user" ? s.messages.at(-1).content : ""; outgoingImages = s.messages.at(-1)?.images || [];
   generating = true; streamingKind = s.generation?.kind || (s.state === "completed" ? "feedback" : "message"); streamingModel = s.model; streamingText = s.generation?.content || ""; streamingActivity = s.generation?.activity || [];
   if (s.state === "completed") renderTraining(); else updateChat();
   const id = s.id;
@@ -241,7 +275,7 @@ async function qaPage() {
   const version = navigationVersion;
   main.innerHTML = intro("智能问答", "从一个问题开始，了解报告与保护的下一步。", `<button type="button" data-open-memory class="secondary mini">我的记忆</button>` + picker()) + disclaimer + `<div class="chat-layout"><aside class="chat-sessions"><h3>最近的对话</h3><button id="new-chat" type="button" class="secondary">＋ 新建问答</button><div id="chat-session-list" class="chat-session-list"></div></aside>${chatCard()}</div>`;
   bindModel(); bindComposer(); updateChat();
-  $("new-chat").onclick = () => { if (generating) return toast("请等待当前回复完成"); clearStream(); current = null; replacePortalURL("/ask"); $("chat-title").textContent = "强制报告助手"; $("chat-input").value = ""; updateChat(); renderRecent(); };
+  $("new-chat").onclick = () => { if (generating) return toast("请等待当前回复完成"); clearStream(); current = null; pendingChatImages = []; replacePortalURL("/ask"); $("chat-title").textContent = "强制报告助手"; $("chat-input").value = ""; updateChat(); renderRecent(); };
   await refreshRecent();
   if (version !== navigationVersion) return;
   if (query.get("session")) { const s = await sessionGet(query.get("session")); if (s.kind !== "qa") throw Error("会话类型不匹配"); openQA(s); }
@@ -249,24 +283,26 @@ async function qaPage() {
 }
 function openQA(s) { clearStream(); current = s; setModel(s.model); replacePortalURL("/ask?session=" + s.id); updateChat(); renderRecent(); resumeGeneration(s); }
 async function sendMessage(retry = false) {
-  if (generating) return;
+  if (generating || checkingImages) return;
   const content = $("chat-input").value.trim();
-  if (!retry && !content) return toast("请先输入对话内容");
+  if (!retry && !content && !pendingChatImages.length) return toast("请输入问题或添加图片");
+  if (pendingChatImages.length && config.models.find(m => m.id === model())?.imageSupport?.status !== "verified") return toast("请先检测所选模型的图片支持");
   if (!retry && current?.lastError) return toast("请先重试上一条提问");
   clearStream(); streamingKind = "message"; generating = true;
   stopRequested = false; stopping = false; stopPromise = null;
   activeRequestId = crypto.randomUUID(); outgoingText = retry ? current?.messages.at(-1)?.content || "" : content;
+  outgoingImages = retry ? current?.messages.at(-1)?.images || [] : [...pendingChatImages];
   const selected = model();
   streamingModel = selected;
   let beforeCount = current?.messages.length || 0;
   try {
     if (!current) { current = await post("/api/sessions", { kind: "qa", learnerId: learnerId(), model: selected }); replacePortalURL("/ask?session=" + current.id); }
     beforeCount = current.messages.length;
-    if (!retry) { current.messages.push({ role: "user", content, time: new Date().toISOString() }); delete current.reportReview; $("chat-input").value = ""; }
+    if (!retry) { current.messages.push({ role: "user", content, images: outgoingImages, time: new Date().toISOString() }); pendingChatImages = []; delete current.reportReview; $("chat-input").value = ""; }
     updateChat();
-    const result = await streamSession(`/api/sessions/${current.id}/${retry ? "reply" : "messages"}`, { learnerId: learnerId(), model: selected, content });
-    if (!stopRequested) { current = result; if (result.stopped) { $("chat-input").value = result.restore?.content || outgoingText; clearStream(); } }
-  } catch (e) { if (!stopRequested) { streamError = !!(streamingText || streamingActivity.length); toast(e.message); if (current?.id) { try { current = await sessionGet(current.id); if (!retry && current.messages.length <= beforeCount) $("chat-input").value = content; } catch {} } } }
+    const result = await streamSession(`/api/sessions/${current.id}/${retry ? "reply" : "messages"}`, { learnerId: learnerId(), model: selected, content, images: outgoingImages });
+    if (!stopRequested) { current = result; if (result.stopped) { $("chat-input").value = result.restore?.content || outgoingText; pendingChatImages = result.restore?.images || outgoingImages; clearStream(); } }
+  } catch (e) { if (!stopRequested) { streamError = !!(streamingText || streamingActivity.length); toast(e.message); if (current?.id) { try { current = await sessionGet(current.id); if (!retry && current.messages.length <= beforeCount) { $("chat-input").value = content; pendingChatImages = outgoingImages; } } catch {} } } }
   finally { if (stopPromise) await stopPromise; generating = false; stopping = false; stopRequested = false; activeRequestId = null; streamController = null; if (current?.messages.at(-1)?.role === "assistant") clearStream(); if (current?.busy) resumeGeneration(current); else updateChat(); if (page === "ask") await refreshRecent(); }
 }
 async function stopReply() {
@@ -279,6 +315,7 @@ async function stopReply() {
       const result = await post(`/api/sessions/${current.id}/stop`, { learnerId: learnerId(), requestId: activeRequestId || current.generation?.id });
       current = result.session;
       if ($("chat-input").value === fallback) $("chat-input").value = result.restore?.content || fallback;
+      pendingChatImages = result.restore?.images || outgoingImages;
       streamController?.abort(); clearStream();
       // A restored page has a polling loop rather than a local send promise.
       if (!streamController) { generating = false; stopping = false; stopRequested = false; activeRequestId = null; updateChat(); }
@@ -325,7 +362,7 @@ function trainingListing() {
 }
 const checks = (options, name) => options.map((o, i) => `<label class="checkline"><input type="checkbox" name="${name}" value="${i}">${esc(o)}</label>`).join("");
 function worksheetHTML(c) {
-  return `<form id="worksheet-form" class="worksheet"><h2>完成五步实训</h2><p>五项各20分，80分达标。沟通和作答共同计分。</p><details open><summary>01 风险识别 <span>20分</span></summary><div class="step-content">${checks(c.riskOptions, "risk")}<label class="field"><span>当前如何保护安全？</span><textarea name="safety" maxlength="4000" placeholder="写明当前危险、保护与陪伴措施"></textarea></label></div></details><details><summary>02 问询沟通 <span>20分</span></summary><div class="step-content">${checks(c.communicationOptions, "communication")}<p class="muted">请在左侧与AI角色实际完成至少一轮沟通。</p></div></details><details><summary>03 报告判断 <span>20分</span></summary><div class="step-content"><label class="field"><span>下一步判断</span><select name="decision" aria-label="下一步判断"><option value="">请选择</option><option value="report">出现疑似侵害或危险，应立即报告</option><option value="wait">等自行调查清楚后再报告</option><option value="none">无需关注或报告</option></select></label><label class="field"><span>判断依据</span><textarea name="reason" maxlength="4000" placeholder="结合当前情形说明，不作犯罪终审"></textarea></label></div></details><details><summary>04 证据梳理 <span>20分</span></summary><div class="step-content">${checks(c.evidenceOptions, "evidence")}<label class="checkline"><input type="checkbox" name="preserveOriginal">保留已有原始材料及时间信息</label><label class="checkline"><input type="checkbox" name="protectPrivacy">避免公开传播可识别信息</label></div></details><details><summary>05 模拟上报 <span>20分</span></summary><div class="step-content"><label class="field"><span>虚构地点</span><input name="reportLocation" maxlength="300" placeholder="例如：虚构学校辅导室"></label><label class="field"><span>疑似事件类型</span><select name="reportType" aria-label="疑似事件类型"><option value="">请选择</option>${[...new Set(data.cases.map(c => c.type))].map(t => `<option>${esc(t)}</option>`).join("")}</select></label><label class="field"><span>客观事件经过</span><textarea name="reportDescription" maxlength="4000" placeholder="记录已有事实、时间和当前安全；区分事实与推测"></textarea></label><label class="checkline"><input type="checkbox" name="confirmFictional">确认仅为虚构实训，模拟上报不发送公安</label></div></details><div class="worksheet-footer"><button type="submit" id="finish-training" class="primary">完成实训，查看评分 →</button><button type="button" id="save-worksheet" class="text-button full-width" style="margin-top:7px">保存填写进度</button><p>分数按固定检查点计算，AI生成复盘解释。</p></div></form>`;
+  return `<form id="worksheet-form" class="worksheet"><h2>完成五步实训</h2><p>五项各20分，80分达标。沟通和作答共同计分。</p><details open><summary>01 风险识别 <span>20分</span></summary><div class="step-content"><label class="field"><span>当前如何保护安全？</span><textarea name="safety" maxlength="4000" placeholder="写明当前危险、保护与陪伴措施"></textarea></label><p class="worksheet-question">哪些是当前情境中的风险信号？（多选）</p>${checks(c.riskOptions, "risk")}</div></details><details><summary>02 问询沟通 <span>20分</span></summary><div class="step-content"><p class="worksheet-question">该如何与孩子或相关当事人沟通？（多选）</p>${checks(c.communicationOptions, "communication")}<p class="muted">请在左侧与AI角色实际完成至少一轮沟通。</p></div></details><details><summary>03 报告判断 <span>20分</span></summary><div class="step-content"><label class="field"><span>下一步判断</span><select name="decision" aria-label="下一步判断"><option value="">请选择</option><option value="report">出现疑似侵害或危险，应立即报告</option><option value="wait">等自行调查清楚后再报告</option><option value="none">无需关注或报告</option></select></label><label class="field"><span>判断依据</span><textarea name="reason" maxlength="4000" placeholder="结合当前情形说明，不作犯罪终审"></textarea></label></div></details><details><summary>04 证据梳理 <span>20分</span></summary><div class="step-content">${checks(c.evidenceOptions, "evidence")}<label class="checkline"><input type="checkbox" name="preserveOriginal">保留已有原始材料及时间信息</label><label class="checkline"><input type="checkbox" name="protectPrivacy">避免公开传播可识别信息</label></div></details><details><summary>05 模拟上报 <span>20分</span></summary><div class="step-content"><label class="field"><span>虚构地点</span><input name="reportLocation" maxlength="300" placeholder="例如：虚构学校辅导室"></label><label class="field"><span>疑似事件类型</span><select name="reportType" aria-label="疑似事件类型"><option value="">请选择</option>${[...new Set(data.cases.map(c => c.type))].map(t => `<option>${esc(t)}</option>`).join("")}</select></label><label class="field"><span>客观事件经过</span><textarea name="reportDescription" maxlength="4000" placeholder="记录已有事实、时间和当前安全；区分事实与推测"></textarea></label><label class="checkline"><input type="checkbox" name="confirmFictional">确认仅为虚构实训，模拟上报不发送公安</label></div></details><div class="worksheet-footer"><button type="submit" id="finish-training" class="primary">完成实训，查看评分 →</button><button type="button" id="save-worksheet" class="text-button full-width" style="margin-top:7px">保存填写进度</button><p>分数按固定检查点计算，AI生成复盘解释。</p></div></form>`;
 }
 function getWorksheet() {
   const f = new FormData($("worksheet-form"));
@@ -339,6 +376,9 @@ function restoreWorksheet(w) {
   for (const name of ["preserveOriginal", "protectPrivacy"]) form.elements[name].checked = !!w[name];
   form.elements.reportLocation.value = w.report?.location || ""; form.elements.reportType.value = w.report?.type || ""; form.elements.reportDescription.value = w.report?.description || ""; form.elements.confirmFictional.checked = !!w.report?.confirmFictional;
 }
+function communicationReview(s) {
+  return s.score?.communicationFeedback ? `<section class="communication-review panel"><h3>问询沟通 · 逐项解析</h3>${s.score.communicationFeedback.map(item => `<article><strong>${esc(item.option)}</strong><span class="badge ${item.appropriate ? "subtle" : "amber"}">${item.appropriate ? "适当做法" : "不适当做法"} · ${item.selected ? "已选" : "未选"}</span><p>${esc(item.explanation)}</p></article>`).join("")}</section>` : "";
+}
 function scoreHTML(s) {
   return `<section class="training-score"><div class="score-head"><div><div class="eyebrow">实训结果 · 固定检查点评分</div><strong>${s.score.total}<span>/ 100</span></strong></div><span>${s.score.passed ? "✓ 已达标" : "建议再练一次"}<br><small>达标线 80 分</small></span></div><div class="score-items">${s.score.items.map(item => `<div><span>${item.title}</span><b>${item.score}<small> / 20</small></b></div>`).join("")}</div></section>`;
 }
@@ -350,7 +390,7 @@ function feedbackHTML(s) {
 function renderTraining() {
   const c = data.cases.find(c => c.id === current.caseId);
   if (current.state === "completed") {
-    main.innerHTML = intro(c.title + " · 实训复盘", "成绩和完整对话已保存，可在个人记录及单位台账查看。", picker() + `<button type="button" data-back-training class="secondary mini">返回案例</button>`) + disclaimer + scoreHTML(current) + feedbackHTML(current) + `<details class="panel"><summary>查看完整实训对话</summary><div class="chat-messages">${messagesHTML(current)}</div></details>` + footer(); bindModel(); setModel(current.model, false); return;
+    main.innerHTML = intro(c.title + " · 实训复盘", "成绩和完整对话已保存，可在个人记录及单位台账查看。", picker() + `<button type="button" data-back-training class="secondary mini">返回案例</button>`) + disclaimer + scoreHTML(current) + communicationReview(current) + feedbackHTML(current) + `<details class="panel"><summary>查看完整实训对话</summary><div class="chat-messages">${messagesHTML(current)}</div></details>` + footer(); bindModel(); setModel(current.model, false); return;
   }
   main.innerHTML = intro(c.title, "练习案例 · " + c.role + " · " + c.character + " · 难度 " + (difficultyLabels[c.level] || c.difficulty), picker() + `<button type="button" data-back-training class="secondary mini">返回案例</button>`) + disclaimer + `<div class="training-layout">${chatCard(true)}${worksheetHTML(c)}</div>` + footer(); bindModel(); setModel(current.model, false); bindComposer(); restoreWorksheet(current.worksheet); updateChat();
   $("worksheet-form").onsubmit = async e => {
@@ -366,11 +406,11 @@ function renderTraining() {
 async function trainingPage() { const version = navigationVersion; trainingListing(); if (query.get("session")) { const value = await sessionGet(query.get("session")); if (version !== navigationVersion) return; current = value; if (current.kind !== "training") throw Error("会话类型不匹配"); renderTraining(); resumeGeneration(current); } else if (query.get("case")) await startTraining(query.get("case")); }
 async function startTraining(id) { current = await post("/api/sessions", { kind: "training", learnerId: learnerId(), model: model(), caseId: id }); replacePortalURL("/training?session=" + current.id); renderTraining(); }
 async function learningPage() {
-  const version = navigationVersion, value = await api(personUrl("/api/learning"));
-  if (version !== navigationVersion) return;
-  learning = value;
-  const applicable = [...data.materials].sort((a, b) => Number(b.roles.includes(data.who.role)) - Number(a.roles.includes(data.who.role)));
-  main.innerHTML = intro("普法学习", `为${data.who.role === "公众" ? "公众" : data.who.role + "岗位"}准备的要点、实操问答与短案例。`) + `<div class="legal-notice">材料为内置制度要点，来源可查；短案例均为虚构。当前未接入案例知识库。</div>` + banner("learning") + `<div class="lesson-grid">${applicable.map(m => { const done = learning.some(r => r.materialId === m.id); return `<section class="lesson-card" data-reveal data-spotlight><div class="lesson-meta"><span class="lesson-symbol">${icon("book")}</span><span>${m.format} · 约${m.minutes}分钟</span><span class="badge ${done ? "" : "subtle"}">${done ? "已完成" : "待学习"}</span></div><h2>${esc(m.title)}</h2><p>${esc(m.intro)}</p><ul>${m.points.map(p => `<li>${esc(p)}</li>`).join("")}</ul><div class="lesson-qa"><strong>${esc(m.question)}</strong><p>${esc(m.answer)}</p></div><div class="lesson-sources">${m.sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title)} ↗</a>`).join("")}</div><button type="button" class="${done ? "secondary" : "primary"}" data-learn="${m.id}" ${done ? "disabled" : ""}>${done ? "✓ 学习已记录" : "我已阅读，记录完成"}</button></section>`; }).join("")}</div>` + footer();
+  const version = navigationVersion;
+  disposeLearning?.();
+  main.innerHTML = intro("普法学习", "阅读、情境检验与实训衔接，分别记录学习进度和知识掌握。") + `<div class="legal-notice">先点击课程的“开始 / 继续阅读”，有效阅读至少30秒并浏览到末尾后确认阅读。仅当前可见课程计时，测验结果单独记录。</div>` + banner("learning") + '<div id="learning-courses" class="lesson-grid"></div>' + footer();
+  const dispose = await mountLearning($("learning-courses"), data);
+  if (version !== navigationVersion) dispose(); else disposeLearning = dispose;
 }
 async function recordsPage() {
   const version = navigationVersion;
@@ -386,7 +426,7 @@ function renderRecords() {
   $("record-filters").innerHTML = Object.entries(labels).map(([key, title]) => `<button type="button" class="${key === filter ? "active" : ""}" data-filter="${key}">${title} ${key === "all" ? all.length : all.filter(s => s.type === key).length}</button>`).join("");
   const shown = all.filter(r => filter === "all" || r.type === filter);
   const draftHTML = r => `<article class="portal-record"><span class="portal-record-icon">${icon("file")}</span><div class="portal-record-info"><h3>${esc(r.title)}</h3><p>报告草稿 · ${time(r.updatedAt)}${r.attachmentName ? " · 含附件" : ""}</p></div><span class="badge amber">未提交</span><div class="actions"><a class="draft-resume" href="/report?draft=${encodeURIComponent(r.id)}">继续填写 ↗</a><button type="button" class="text-button" data-delete-draft="${esc(r.id)}">删除草稿</button></div></article>`;
-  $("record-list").innerHTML = shown.map(r => r.type === "draft" ? draftHTML(r) : `<article class="portal-record"><span class="portal-record-icon">${icon(r.type === "qa" ? "spark" : r.type === "training" ? "review" : r.type === "learning" ? "book" : "file")}</span><div class="portal-record-info"><h3>${esc(r.title)}</h3><p>${labels[r.type]} · ${time(r.updatedAt)}${r.model ? " · " + esc(modelName(r.model)) : ""}</p></div><span class="badge ${r.score && !r.score.passed ? "amber" : "subtle"}">${r.type === "report" ? esc(r.status) : r.type === "learning" ? "已完成" : r.score ? r.score.total + "分 · " + (r.score.passed ? "达标" : "未达标") : r.type === "training" ? "进行中" : r.messageCount + "条消息"}</span><div class="actions">${r.type === "qa" || r.type === "training" ? `<button type="button" data-open-record="${r.id}">查看</button>${r.type === "training" || r.state !== "completed" ? `<a href="/${r.type === "qa" ? "ask" : "training"}?session=${r.id}">${r.state === "completed" ? "复盘" : "继续"} ↗</a>` : ""}<button type="button" class="text-button" data-delete-session="${r.id}">删除</button>` : r.type === "learning" ? `<a href="/learning">查看材料 ↗</a><button type="button" class="text-button" data-delete-learning="${r.id}">删除记录</button>` : `<a href="/report">报告表单 ↗</a>`}</div></article>`).join("") || emptyArtwork("这里还没有记录", "开始一次问答、实训或学习后，记录会自动保存。");
+  $("record-list").innerHTML = shown.map(r => r.type === "draft" ? draftHTML(r) : `<article class="portal-record"><span class="portal-record-icon">${icon(r.type === "qa" ? "spark" : r.type === "training" ? "review" : r.type === "learning" ? "book" : "file")}</span><div class="portal-record-info"><h3>${esc(r.title)}</h3><p>${labels[r.type]} · ${time(r.updatedAt)}${r.model ? " · " + esc(modelName(r.model)) : ""}</p></div><span class="badge ${r.score && !r.score.passed ? "amber" : "subtle"}">${r.type === "report" ? esc(r.status) : r.type === "learning" ? (r.masteredAt ? "测验已掌握" : "阅读完成 · 待检验") : r.score ? r.score.total + "分 · " + (r.score.passed ? "达标" : "未达标") : r.type === "training" ? "进行中" : r.messageCount + "条消息"}</span><div class="actions">${r.type === "qa" || r.type === "training" ? `<button type="button" data-open-record="${r.id}">查看</button>${r.type === "training" || r.state !== "completed" ? `<a href="/${r.type === "qa" ? "ask" : "training"}?session=${r.id}">${r.state === "completed" ? "复盘" : "继续"} ↗</a>` : ""}<button type="button" class="text-button" data-delete-session="${r.id}">删除</button>` : r.type === "learning" ? `<a href="/learning">查看材料 ↗</a><button type="button" class="text-button" data-delete-learning="${r.id}">删除记录</button>` : `<a href="/report">报告表单 ↗</a>`}</div></article>`).join("") || emptyArtwork("这里还没有记录", "开始一次问答、实训或学习后，记录会自动保存。");
 }
 function worksheetReview(s) {
   if (!s.worksheet) return "";
@@ -395,14 +435,14 @@ function worksheetReview(s) {
 }
 async function openRecord(id) {
   const s = await sessionGet(id); $("record-detail-title").textContent = s.title;
-  $("record-detail-body").innerHTML = (s.score ? scoreHTML(s) + feedbackHTML(s) : "") + worksheetReview(s) + `<h3>完整对话</h3><div class="chat-messages">${messagesHTML(s)}</div>` + (s.lastError ? `<p class="portal-error">${esc(s.lastError)}</p>` : "");
+  $("record-detail-body").innerHTML = (s.score ? scoreHTML(s) + communicationReview(s) + feedbackHTML(s) : "") + worksheetReview(s) + `<h3>完整对话</h3><div class="chat-messages">${messagesHTML(s)}</div>` + (s.lastError ? `<p class="portal-error">${esc(s.lastError)}</p>` : "");
   $("record-detail-body").querySelector("[data-feedback]")?.remove(); openDialog($("record-detail"));
 }
 async function ledgerPage(unitId = query.get("unit") || data.who.unitId || data.units[0].id) {
   const version = navigationVersion;
   const ledger = await api("/api/units/" + encodeURIComponent(unitId));
   if (version !== navigationVersion) return;
-  main.innerHTML = intro("培训台账", "查看您的学习与实训完成情况，导出履职培训摘要。", `<a class="export-link" href="/api/units/${encodeURIComponent(unitId)}/export.csv">导出台账 ↓</a>`) + `<div class="stats ledger-stats">${[["已完成实训", ledger.totals.completed], ["达标实训", ledger.totals.passed], ["学习完成", ledger.totals.learning]].map(([title, n]) => `<div class="stat"><div class="stat-label">${title}</div><strong>${n}</strong><p>${esc(data.who.name)}</p></div>`).join("")}</div><p class="ledger-note">台账仅包含当前用户的完成情况和评分摘要。</p><section class="ledger-panel"><div class="table-wrap"><table class="case-table"><thead><tr>${["学员 / 岗位", "类型", "案例 / 课程", "完成情况", "总分 / 达标", "时间"].map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${ledger.rows.map(r => `<tr><td>${esc(data.who.name)}<div class="muted">${esc(data.who.role)}</div></td><td>${r.kind}</td><td>${esc(r.title)}</td><td><span class="badge subtle">${r.state}</span></td><td>${r.score ? r.score.total + " / " + (r.score.passed ? "达标" : "未达标") : "—"}</td><td>${time(r.time)}</td></tr>`).join("") || '<tr><td colspan="6">' + emptyArtwork('还没有培训记录', '完成学习或实训后将在这里显示。') + '</td></tr>'}</tbody></table></div></section>` + footer();
+  main.innerHTML = intro("培训台账", "查看您的学习与实训完成情况，导出履职培训摘要。", `<a class="export-link" href="/api/units/${encodeURIComponent(unitId)}/export.csv">导出台账 ↓</a>`) + `<div class="stats ledger-stats">${[["已完成实训", ledger.totals.completed], ["达标实训", ledger.totals.passed], ["阅读完成", ledger.totals.learning], ["测验已掌握", ledger.totals.mastered || 0]].map(([title, n]) => `<div class="stat"><div class="stat-label">${title}</div><strong>${n}</strong><p>${esc(data.who.name)}</p></div>`).join("")}</div><p class="ledger-note">台账仅包含当前用户的完成情况和评分摘要。</p><section class="ledger-panel"><div class="table-wrap"><table class="case-table"><thead><tr>${["学员 / 岗位", "类型", "案例 / 课程", "完成情况", "总分 / 达标", "时间"].map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${ledger.rows.map(r => `<tr><td>${esc(data.who.name)}<div class="muted">${esc(data.who.role)}</div></td><td>${r.kind}</td><td>${esc(r.title)}</td><td><span class="badge subtle">${r.state}</span></td><td>${r.score ? r.score.total + " / " + (r.score.passed ? "达标" : "未达标") : r.quizScore != null ? r.quizScore + " / " + (r.mastered ? "已掌握" : "待巩固") : "待检验"}</td><td>${time(r.time)}</td></tr>`).join("") || '<tr><td colspan="6">' + emptyArtwork('还没有培训记录', '完成学习或实训后将在这里显示。') + '</td></tr>'}</tbody></table></div></section>` + footer();
 }
 main.onclick = async e => {
   const button = e.target.closest("button"); if (!button || button.disabled) return;
@@ -429,7 +469,6 @@ main.onclick = async e => {
       catch (error) { toast(error.message); try { current = await sessionGet(current.id); } catch {} }
       finally { generating = false; if (current.busy) resumeGeneration(current); else renderTraining(); }
     }
-    else if (button.dataset.learn) { button.disabled = true; await post("/api/learning", { learnerId: learnerId(), materialId: button.dataset.learn }); await learningPage(); toast("学习完成已记录"); }
     else if (button.dataset.filter) { filter = button.dataset.filter; renderRecords(); }
     else if (button.hasAttribute("data-refresh-records")) { button.disabled = true; await recordsPage(); }
     else if (button.dataset.openRecord) await openRecord(button.dataset.openRecord);
@@ -461,7 +500,7 @@ function finishNavigation() {
 function savePage(url) {
   const fragment = document.createDocumentFragment();
   const focused = main.contains(document.activeElement) ? document.activeElement : null;
-  const state = { fragment, owner: accountState.ownerId, current, recent, learning, filter, receipts: data.receipts, questionPage, scrollY: scrollY, focused };
+  const state = { fragment, owner: accountState.ownerId, current, recent, learning, filter, pendingChatImages, receipts: data.receipts, questionPage, scrollY: scrollY, focused };
   while (main.firstChild) fragment.append(main.firstChild);
   pageCache.delete(url); pageCache.set(url, state);
   while (pageCache.size > 8) pageCache.delete(pageCache.keys().next().value);
@@ -477,15 +516,17 @@ async function navigate(url, push = true) {
   // Existing full navigation semantics are retained for in-flight AI or mutations.
   if (generating || pendingAction) { location.href = url.href; return; }
   if (navigationBusy) { queuedNavigation = { url, push }; return; }
+  disposeLearning?.(); disposeLearning = null;
   stopQuestions(); composerObserver?.disconnect(); ++pollVersion; ++navigationVersion;
   for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
   savePage(displayedURL);
+  if (page === "learning") pageCache.delete(displayedURL);
   if (push) history.pushState(null, '', next);
   page = url.pathname.slice(1); query = new URLSearchParams(url.search); displayedURL = next;
   setPageTitle();
   const cached = pageCache.get(next);
   if (cached?.owner === accountState.ownerId) {
-    ({ current, recent, learning, filter, questionPage } = cached); data.receipts = cached.receipts;
+    ({ current, recent, learning, filter, questionPage, pendingChatImages } = cached); data.receipts = cached.receipts;
     main.append(cached.fragment); pageCache.delete(next);
     if ($('chat-input')) bindComposer();
     if ($('question-carousel')) startQuestions();
@@ -496,7 +537,7 @@ async function navigate(url, push = true) {
     if (refresh) refresh().catch(error => toast(error.message));
     return;
   }
-  current = null; clearStream(); filter = 'all'; questionPage = 0;
+  current = null; pendingChatImages = []; clearStream(); filter = 'all'; questionPage = 0;
   main.innerHTML = intro(pageTitles[page], '正在同步最新内容…') + '<div class="portal-route-skeleton" aria-hidden="true"><div></div><div></div><div></div></div>';
   window.scrollTo({ top: 0, behavior: 'instant' });
   const version = navigationVersion;

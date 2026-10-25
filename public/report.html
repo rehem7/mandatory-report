@@ -7,7 +7,7 @@
   <title>公众报告 · 强制报告智能体</title>
   <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/visual.css"><link rel="icon" href="/assets/visual/guardian-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/portal.css">
-</head>
+<link rel="stylesheet" href="/accessibility.css"></head>
 <body class="report-page public-page">
   <a class="skip-link" href="#report-form">跳到报告表单</a>
   <div class="public-shell"><aside id="public-sidebar" class="public-sidebar"></aside><div class="public-workspace"><header id="public-topbar" class="public-topbar"></header>
@@ -32,7 +32,8 @@
               <label class="field"><span>事件发生时间 <b class="required">*</b></span><input type="datetime-local" name="occurredAt" required></label>
               <label class="field"><span>受害人的年龄范围 <b class="required">*</b></span><select name="age" required><option value="">请选择年龄范围</option><option>0-6岁</option><option>7-13岁</option><option>14-17岁</option><option>18岁以上</option></select></label>
             </div>
-            <label class="field description-field"><span>事件描述 <b class="required">*</b></span><textarea name="description" required placeholder="请描述事件经过、受害者情况，以及目前是否仍处于危险中……"></textarea><small class="muted">清楚的描述有助于工作人员核实线索。请避免传播无关个人信息。</small></label>
+            <label class="field description-field"><span>事件描述 <b class="required">*</b></span><textarea name="description" required placeholder="记录时间、地点、亲眼观察及当事人原话，区分已知情况与推测……"></textarea><small class="muted">清楚的描述有助于工作人员核实线索。请避免传播无关个人信息。</small></label>
+            <details class="description-example"><summary>查看事件描述示例</summary><p><strong>以下为虚构示例，请按实际情况填写，不要照抄。</strong></p><blockquote>X 日下午放学时，在学校教室观察到学生手臂、腿部有多处淤青。学生迟迟不愿离校，并自述“害怕回家”。目前由教师在安全区域陪伴。伤痕原因尚未核实，未自行作出侵害认定。</blockquote><p>可按“发现时间与地点—客观观察—当事人原话—当前安全—尚待核实信息”组织。</p></details>
           </section>
           <section class="form-block" aria-labelledby="part-three"><div class="block-heading"><span class="step-number">03</span><div><h3 id="part-three">证据与联系</h3><p class="muted">以下均为选填，匿名报告也会被接收。</p></div></div>
             <div class="field"><span>证据材料 <span class="field-hint">选填 · 可多选</span></span><label class="upload-zone" for="attachment"><span class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4m-4 4 4-4 4 4M4 16v4h16v-4"/></svg></span><strong id="attachment-label">点击添加证据文件</strong><span class="muted">支持照片、视频、录音、PDF和TXT，可分多次添加</span><span class="muted" id="attachment-hint">最多10个文件 · 单个不超过10MB · 合计不超过50MB</span><input class="visually-hidden" type="file" id="attachment" multiple accept=".png,.jpg,.jpeg,.webp,.heic,.heif,.mp4,.mov,.webm,.mp3,.m4a,.wav,.ogg,.amr,.aac,.pdf,.txt"></label><ul id="attachment-list" class="attachment-list" aria-label="已选择的证据文件" aria-live="polite"></ul><button id="remove-attachment" class="text-button mini" type="button" hidden>清空附件</button></div>

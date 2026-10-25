@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import { models as legacyModels } from "./content.js";
 import { modelBrand, displayModelName, canonicalModelId } from "./public/model-brand.js";
 
@@ -73,6 +74,14 @@ export function modelRoutes(id) {
   if (!candidates) { const error = Error("请选择已配置的模型"); error.status = 400; throw error; }
   return candidates;
 }
-export function modelConfig() {
-  return { configured: publicModels.some(m => m.available), models: publicModels, defaultModel: primaryKey ? legacyModels[0].id : publicModels.find(m => m.available)?.id || legacyModels[0].id, provider: "多通道模型服务", channels, knowledgeBase: false, capabilities: { search: { enabled: true, strength: "medium", mode: "application-tool", maxResults: 5 }, images: false, memory: true, reportDrafts: true } };
+export const routeKey = route => crypto.createHash('sha256').update([route.endpoint, route.upstreamId, route.key].join('\n')).digest('hex');
+export function verifiedImageRoutes(id, checks = []) { return modelRoutes(id).filter(route => checks.some(c => c.routeKey === routeKey(route) && c.status === 'verified' && Date.now() - Date.parse(c.checkedAt) < 30 * 86400000)).map(routeKey); }
+export function modelConfig(checks = [], observations = []) {
+  const models = publicModels.map(m => {
+    const verified = verifiedImageRoutes(m.id, checks), check = checks.filter(c => verified.length ? verified.includes(c.routeKey) : modelRoutes(m.id).some(r => routeKey(r) === c.routeKey)).sort((a, b) => b.checkedAt.localeCompare(a.checkedAt))[0];
+    const observation = observations.find(o => o.modelId === m.id);
+    const speedNote = observation ? `最近请求约${(observation.elapsedMs / 1000).toFixed(1)}秒（含工具，仅供参考）` : check?.elapsedMs ? `最近图片检测约${(check.elapsedMs / 1000).toFixed(1)}秒，仅供参考` : '速度暂无实测数据';
+    return { ...m, imageSupport: { status: verified.length ? 'verified' : 'unverified', checkedAt: check?.checkedAt || null }, description: `文字问答、信息梳理 · ${verified.length ? '图片理解已验证' : '图片能力待验证'}`, speedNote };
+  });
+  return { configured: publicModels.some(m => m.available), models, defaultModel: primaryKey ? legacyModels[0].id : publicModels.find(m => m.available)?.id || legacyModels[0].id, provider: "多通道模型服务", channels, knowledgeBase: false, capabilities: { search: { enabled: true, strength: "medium", mode: "application-tool", maxResults: 5 }, images: true, memory: true, reportDrafts: true } };
 }

@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { materials } from '../content.js';
+import { MIN_READ_SECONDS, lessonMetadata, lessonState, readingPulse, completeReading, assessLesson } from '../learning.js';
+const actor = { ownerId: 'a', profile: { id: 'a-profile' } }, other = { ownerId: 'b', profile: { id: 'b-profile' } }, m = materials.find(m => m.id === 'teacher-duty');
+test('服务端计时、末尾进度、暂停恢复及重复快速请求不能提前完成阅读', () => {
+  const db = { learning: [] }, start = 100000;
+  readingPulse(db, actor, m, { action: 'start', active: true }, start);
+  for (let i = 0; i < 30; i++) readingPulse(db, actor, m, { action: 'pulse', active: true, atEnd: true, readSeconds: 9999 }, start);
+  assert.equal(lessonState(db, actor.ownerId, m).readSeconds, 0);
+  assert.throws(() => completeReading(db, actor, m), e => e.status === 409);
+  readingPulse(db, actor, m, { action: 'pause', active: false }, start + 5000);
+  readingPulse(db, actor, m, { action: 'pulse', active: true }, start + 90000);
+  assert.equal(lessonState(db, actor.ownerId, m).readSeconds, 5);
+  assert.equal(lessonState(db, actor.ownerId, m).active, false);
+  readingPulse(db, actor, m, { action: 'start', active: true }, start + 100000);
+  for (let i = 1; i <= 5; i++) readingPulse(db, actor, m, { action: 'pulse', active: true, atEnd: true }, start + 100000 + i * 5000);
+  assert.equal(lessonState(db, actor.ownerId, m).readSeconds, MIN_READ_SECONDS);
+  assert.ok(completeReading(db, actor, m).completedAt);
+});
+test('阅读与知识掌握分开；错误答案有逐项解析，全部答对才标记掌握', () => {
+  const db = { learning: [], learningProgress: [{ ownerId: 'a', materialId: m.id, readSeconds: MIN_READ_SECONDS, reachedEnd: true }] };
+  assert.throws(() => assessLesson(db, actor, m, [0, 1]), /先完成阅读/);
+  const record = completeReading(db, actor, m); assert.equal(record.masteredAt, null);
+  const failed = assessLesson(db, actor, m, [1, 0]); assert.equal(failed.lastQuiz.score, 0); assert.ok(failed.lastQuiz.items.every(i => !i.correct && i.explanation)); assert.equal(failed.masteredAt, null);
+  const passed = assessLesson(db, actor, m, [0, 1]); assert.equal(passed.bestScore, 100); assert.ok(passed.masteredAt); assert.equal(passed.attempts, 2);
+  assert.throws(() => assessLesson(db, other, m, [0, 1]), /先完成阅读/);
+  assert.throws(() => assessLesson(db, actor, m, [99]), /全部情境题/);
+  assert.ok(lessonMetadata(m).relatedCaseIds.includes('school-injury')); assert.ok(lessonMetadata(m).quiz.every(q => !('correct' in q) && !('explanation' in q)));
+});
+test('同一用户一次只计一个课程，账号隔离，长时间离开只计一次心跳', () => {
+  const db = { learning: [] }, next = materials[0];
+  readingPulse(db, actor, m, { action: 'start', active: true }, 1000);
+  readingPulse(db, actor, next, { action: 'start', active: true }, 2000);
+  readingPulse(db, actor, m, { action: 'pulse', active: true, atEnd: true }, 100000);
+  assert.equal(lessonState(db, 'a', m).readSeconds, 0);
+  readingPulse(db, actor, next, { action: 'pulse', active: true }, 100000);
+  assert.equal(lessonState(db, 'a', next).readSeconds, 6);
+  assert.equal(lessonState(db, 'b', next).readSeconds, 0);
+  assert.throws(() => completeReading(db, actor, next), /浏览到/);
+});

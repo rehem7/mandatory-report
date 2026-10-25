@@ -91,5 +91,6 @@ export function gradeTraining(scenario, worksheet, messages) {
   ];
   const advice = ["识别具体风险信号，并写明当前安全保护措施。", "采用开放、温和的问询，实际完成沟通，避免诱导或绝对保密承诺。", scenario.rationale, "保留已有原始记录和时间信息，避免公开传播与反复问询。", "完成虚构地点、事件类型和客观经过，明确本次仅为模拟上报。"];
   const total = scores.reduce((a, b) => a + b, 0);
-  return { total, passed: total >= 80, passLine: 80, rubric: "演示规则 v1", items: dimensions.map((title, i) => ({ title, score: scores[i], max: 20, advice: advice[i] })) };
+  const communicationReasons = ['先说明提供保护的目的，有助于建立安全感；不等于保证调查或处理结果。', '开放问题让孩子用自己的话表达当前安全与担忧，避免预设答案。', '不能承诺无论发生什么都不报告，应说明隐私保护与必要报告的边界。', '带答案的逼问可能诱导陈述，造成压力，应采用开放、温和的沟通。'];
+  return { total, passed: total >= 80, passLine: 80, rubric: "演示规则 v1", communicationFeedback: scenario.communicationOptions.map((option, index) => ({ option, selected: communication.includes(index), appropriate: scenario.expectedCommunication.includes(index), explanation: communicationReasons[index] })), items: dimensions.map((title, i) => ({ title, score: scores[i], max: 20, advice: advice[i] })) };
 }
