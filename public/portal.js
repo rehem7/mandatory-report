@@ -59,7 +59,7 @@ function startQuestions() {
     const area = $("question-carousel");
     if (!area || document.hidden || current || generating || $("chat-input")?.value.trim() || area.matches(":hover") || area.contains(document.activeElement)) return;
     rotateQuestions();
-  }, 8000);
+  }, 4000);
 }
 window.addEventListener("pagehide", stopQuestions);
 window.addEventListener("pageshow", () => { if ($("question-carousel")) startQuestions(); });
@@ -176,7 +176,7 @@ function messagesHTML(s) {
 }
 function composer() { return `<form id="chat-form" class="chat-composer"><label for="chat-input" class="visually-hidden">输入对话内容</label><textarea id="chat-input" rows="1" maxlength="4000" placeholder="描述您的问题；请不要提供真实未成年人的个人信息…"></textarea><div class="composer-bottom"><span>Enter 发送 · Shift + Enter 换行<br>对话会保存到“我的记录”</span><button id="chat-send" class="primary" type="submit">发送 <span aria-hidden="true">↑</span></button></div></form>`; }
 function chatCard(training = false) {
-  return `<section class="chat-card"><div class="chat-heading"><div><h2 id="chat-title">${training ? esc(data.cases.find(c => c.id === current.caseId).character) : "强制报告助手"}</h2><p id="chat-subtitle">${training ? "与AI角色沟通，逐步了解情形" : "围绕报告判断、证据留存与保护措施提问"}</p></div></div>${training ? `<div class="training-case-note">${esc(data.cases.find(c => c.id === current.caseId).summary)}</div>` : ""}<div id="chat-messages" class="chat-messages" aria-live="polite"></div><div id="chat-retry" class="chat-retry" hidden></div>${composer()}</section>`;
+  return `<section class="chat-card"><div class="chat-heading"><div><h2 id="chat-title">${training ? esc(data.cases.find(c => c.id === current.caseId).character) : "强制报告助手"}</h2><p id="chat-subtitle">${training ? "与AI角色沟通，逐步了解情形" : "围绕报告判断、证据留存与保护措施提问"}</p></div>${training ? "" : `<div class="qa-report-actions" aria-label="报告操作"><button type="button" class="primary" data-build-report>从对话整理报告 ↗</button><a class="secondary" href="/report">填写表单 ↗</a></div>`}</div>${training ? `<div class="training-case-note">${esc(data.cases.find(c => c.id === current.caseId).summary)}</div>` : ""}<div id="chat-messages" class="chat-messages" aria-live="polite"></div><div id="chat-retry" class="chat-retry" hidden></div>${composer()}</section>`;
 }
 function updateChat() {
   if (!$("chat-messages")) return;
@@ -193,6 +193,8 @@ function updateChat() {
   $("chat-send").classList.toggle("stop-generation", canStop);
   if (!stopRequested && (generating || streamError && (streamingText || streamingActivity.length)) && streamingKind === "message") $("chat-messages").insertAdjacentHTML("beforeend", streamMessageHTML());
   if ($("model-trigger")) $("model-trigger").disabled = generating;
+  const reportButton = main.querySelector("[data-build-report]");
+  if (reportButton) { reportButton.disabled = generating || !current?.messages.some(message => message.role === "user"); reportButton.title = reportButton.disabled && !generating ? "先描述具体情况，再整理报告草稿" : "整理后进入表单核对，不会直接提交"; }
   if (current?.kind === "qa") { $("chat-title").textContent = current.title; $("chat-subtitle").textContent = "当前模型 " + modelName(model()); }
   $("chat-messages").scrollTop = $("chat-messages").scrollHeight;
   resizeComposer();
@@ -236,7 +238,7 @@ async function refreshRecent() { const version = navigationVersion; const value 
 function renderRecent() { $("chat-session-list").innerHTML = recent.filter(s => s.kind === "qa").slice(0, 12).map(s => `<button class="session-link ${s.id === current?.id ? "active" : ""}" type="button" data-session="${s.id}"><span>${esc(s.title)}</span></button>`).join("") || `<p class="muted">还没有问答记录</p>`; }
 async function qaPage() {
   const version = navigationVersion;
-  main.innerHTML = intro("智能问答", "从一个问题开始，了解报告与保护的下一步。", `<button type="button" data-open-memory class="secondary mini">我的记忆</button>` + picker()) + disclaimer + `<div class="chat-layout"><aside class="chat-sessions"><h3>最近的对话</h3><button id="new-chat" type="button" class="secondary">＋ 新建问答</button><div id="chat-session-list" class="chat-session-list"></div></aside>${chatCard()}</div><div class="qa-links"><span>联网检索 · 中等范围 · 尚未接入专用案例库</span><div class="actions"><button type="button" class="text-button mini" data-build-report>从对话整理报告 ↗</button><a href="/report">填写表单 ↗</a></div></div>` + footer();
+  main.innerHTML = intro("智能问答", "从一个问题开始，了解报告与保护的下一步。", `<button type="button" data-open-memory class="secondary mini">我的记忆</button>` + picker()) + disclaimer + `<div class="chat-layout"><aside class="chat-sessions"><h3>最近的对话</h3><button id="new-chat" type="button" class="secondary">＋ 新建问答</button><div id="chat-session-list" class="chat-session-list"></div></aside>${chatCard()}</div>`;
   bindModel(); bindComposer(); updateChat();
   $("new-chat").onclick = () => { if (generating) return toast("请等待当前回复完成"); clearStream(); current = null; replacePortalURL("/ask"); $("chat-title").textContent = "强制报告助手"; $("chat-input").value = ""; updateChat(); renderRecent(); };
   await refreshRecent();
@@ -449,7 +451,7 @@ function savePage(url) {
   pageCache.delete(url); pageCache.set(url, state);
   while (pageCache.size > 8) pageCache.delete(pageCache.keys().next().value);
 }
-function setPageTitle() { document.title = pageTitles[page] + " · 强制报告智能体"; activateShell(page); }
+function setPageTitle() { main.dataset.page = page; document.title = pageTitles[page] + " · 强制报告智能体"; activateShell(page); }
 function configuredNotice() {
   if (!config.configured && ["ask", "training"].includes(page) && !main.querySelector('[data-ai-unavailable]')) main.insertAdjacentHTML("afterbegin", `<div class="portal-error" data-ai-unavailable>真实AI功能暂不可用，请检查服务端配置。</div>`);
 }
