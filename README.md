@@ -64,6 +64,7 @@ npm start
 | `FREE_API_KEY` | `https://api.fuka.win/v1` | 主通道 |
 | `FREE_API_KEY_3` | `https://api.fuka.win/v1` | 扩展模型通道 |
 | `FREE_API_KEY_2` | `https://jianzhile.vip/v1` | 可选扩展通道 |
+| `DEEPSEEK_API_KEY` | `https://api.deepseek.com/v1` | DeepSeek V4.1 Flash、V4 Pro 官方通道 |
 
 可用模型取决于密钥权限与模型目录。未配置密钥时仍可浏览页面，AI 功能需有效配置。`PORT` 和 `DATA_DIR` 可分别指定端口与数据目录；默认数据保存在 `data/database.json`。
 

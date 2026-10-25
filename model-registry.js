@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { models as legacyModels } from "./content.js";
 import { modelBrand, displayModelName, canonicalModelId, modelTraits } from "./public/model-brand.js";
 
-const allowedSecrets = new Set(["FREE_API_KEY", "FREE_API_KEY_2", "FREE_API_KEY_3", "FREE_API_KEY_4"]);
+const allowedSecrets = new Set(["FREE_API_KEY", "FREE_API_KEY_2", "FREE_API_KEY_3", "FREE_API_KEY_4", "DEEPSEEK_API_KEY"]);
 const credentials = new Map();
 function credential(name) {
   if (!allowedSecrets.has(name)) throw Error("无效的模型通道配置");
@@ -20,23 +20,39 @@ function apiBase(value) { const base = value.replace(/\/+$/, ""); return base.en
 const primary = apiBase(process.env.AI_BASE_URL || "https://api.fuka.win/v1");
 const secondary = apiBase(process.env.AI_SECONDARY_BASE_URL || "https://jianzhile.vip/v1");
 const third = apiBase(process.env.AI_KEY_3_BASE_URL || "https://api.fuka.win/v1");
+const deepseek = apiBase(process.env.DEEPSEEK_API_BASE_URL || "https://api.deepseek.com");
 const routes = new Map();
 const identities = new Map();
 const primaryKey = credential("FREE_API_KEY");
+const deepseekKey = credential("DEEPSEEK_API_KEY");
 const publicModels = legacyModels.map(model => {
   routes.set(model.id, [{ endpoint: primary, key: primaryKey, upstreamId: model.id }]);
   identities.set(canonicalModelId(model.id), model.id);
   return { ...model, ...modelBrand(model.id), provider: "api.fuka.win", available: !!primaryKey };
 });
 const channels = [];
-const selectedClaude = new Set(["claude-5-opus", "claude-fable-5"]);
+const selectedClaude = new Set(["claude-5-opus"]);
+const excludedModels = new Set(["claude-fable-5", "claude-fable-5.1", "claude-4.8-opus"]);
 const domesticBrands = new Set(["deepseek", "glm", "kimi", "minimax", "longcat"]);
 const chatCapable = id => !/(?:embedding|rerank|whisper|tts|dall-e|image|imagen|veo|sora|stable-diffusion|flux)/i.test(id);
+if (deepseekKey) {
+  for (const definition of [
+    { upstreamId: "deepseek-flash-1017", name: "DeepSeek V4.1 Flash" },
+    { upstreamId: "deepseek-v4-pro", name: "DeepSeek V4 Pro" }
+  ]) {
+    const id = "deepseek:" + definition.upstreamId;
+    routes.set(id, [{ endpoint: deepseek, key: deepseekKey, upstreamId: definition.upstreamId }]);
+    identities.set(canonicalModelId(definition.upstreamId), id);
+    publicModels.push({ id, name: definition.name, ...modelBrand(definition.upstreamId), provider: "api.deepseek.com", available: true });
+  }
+  channels.push({ slot: "deepseek", configured: true, state: "ready", modelCount: 2 });
+}
 async function discover(slot) {
-  const key = credential("FREE_API_KEY_" + slot);
+  const keyName = slot === 1 ? "FREE_API_KEY" : "FREE_API_KEY_" + slot;
+  const key = credential(keyName);
   if (!key) return { slot, configured: false, state: "missing", models: [] };
   try {
-    const configuredEndpoint = slot === 3 ? third : secondary;
+    const configuredEndpoint = slot === 1 ? primary : slot === 3 ? third : secondary;
     let endpoint = configuredEndpoint, response = await fetch(endpoint + "/models", { headers: { Authorization: `Bearer ${key}` }, redirect: "error", signal: AbortSignal.timeout(15000) });
     if (response.status === 404) {
       endpoint = configuredEndpoint.replace(/\/v1$/, "");
@@ -51,11 +67,14 @@ async function discover(slot) {
 }
 // Tests explicitly disable discovery or point both gateways at local protocol servers.
 if (process.env.AI_CATALOG_ENABLED !== "0") {
-  const results = await Promise.all([2, 3, 4].map(discover));
-  for (const channel of results) {
+  const results = await Promise.all([1, 2, 3, 4].map(discover));
+  const orderedResults = [...results].sort((a, b) => (a.slot === 1 ? 1 : 0) - (b.slot === 1 ? 1 : 0));
+  for (const channel of orderedResults) {
     channels.push({ slot: channel.slot, configured: channel.configured, state: channel.state, modelCount: channel.models.length, ...(channel.status ? { status: channel.status } : {}) });
     for (const model of channel.models) {
       const identity = canonicalModelId(model.id);
+      if (excludedModels.has(identity)) continue;
+      if (modelBrand(model.id, model.owned_by).brand === "claude" && !selectedClaude.has(identity)) continue;
       // Key 3 adds only the selected Claude editions and domestic models.
       // Existing options may still use this channel as a fallback route.
       if (channel.slot === 3 && !identities.has(identity) &&

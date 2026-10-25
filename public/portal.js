@@ -464,9 +464,9 @@ main.onclick = async e => {
     else if (button.hasAttribute("data-build-report")) {
       if (generating) return toast("请先停止或等待当前回复");
       if (!current?.messages.some(m => m.role === "user")) return toast("请先在对话中描述需要报告的情况");
-      generating = true; streamingKind = "draft"; button.disabled = true; button.textContent = "正在整理草稿…"; updateChat();
+      generating = true; streamingKind = "draft"; button.disabled = true; button.dataset.generating = "true"; button.setAttribute("aria-busy", "true"); button.innerHTML = '<span class="draft-spinner" aria-hidden="true"></span><span>正在整理草稿…</span>'; updateChat();
       try { const sessionId = current.id; const value = await post(`/api/sessions/${sessionId}/report-draft`, { learnerId: learnerId(), model: model() }); current.reportReview = value; delete current.reportDraft; await openReportReview(value, sessionId); }
-      finally { generating = false; streamingKind = "message"; if (button.isConnected) { button.disabled = false; button.textContent = "从对话整理报告 ↗"; updateChat(); } }
+      finally { generating = false; streamingKind = "message"; if (button.isConnected) { button.disabled = false; delete button.dataset.generating; button.removeAttribute("aria-busy"); button.textContent = "从对话整理报告 ↗"; updateChat(); } }
     }
     else if (button.dataset.session) { if (generating) return toast("请等待回复完成"); openQA(await sessionGet(button.dataset.session)); }
     else if (button.hasAttribute("data-retry")) await sendMessage(true);

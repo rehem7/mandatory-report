@@ -6,14 +6,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { readEvents } from "../public/event-stream.js";
-import { canonicalModelId, displayModelName } from "../public/model-brand.js";
+import { canonicalModelId, displayModelName, modelTraits } from "../public/model-brand.js";
 
 test("分密钥发现模型、去重与厂商图标、正确路由和流式回退边界", async () => {
   const calls = []; let partialFailure = false, queued = true;
   const tokens = ["model-test-primary", "model-test-two", "model-test-three", "model-test-four"];
   const primary = http.createServer(async (req, res) => {
     if (req.url === "/v1/models") {
-      assert.equal(req.headers.authorization, "Bearer " + tokens[2]);
+      assert.ok([tokens[0], tokens[2]].includes(req.headers.authorization.slice("Bearer ".length)));
       const ids = ["[镜像]gpt-6-sol①", "deepseek-v4", "[备用]deepseek-v4②", "[镜像]gemini-3.8-flash", "[故人情]gemini-3.8-flash",
         "[新]gpt-5.4①", "[新]gemini-4-argon③", "[新]claude-5-opus㉗", "[新]claude-fable-5", "[新]claude-fable-5.1", "[新]claude-4.8-opus", "[新]glm-5.2②"];
       res.writeHead(200, { "Content-Type": "application/json" }); return res.end(JSON.stringify({ data: ids.map(id => ({ id })) }));
@@ -61,27 +61,39 @@ test("分密钥发现模型、去重与厂商图标、正确路由和流式回�
   const fetch = sessionClient(base);
   const post = (url, body) => fetch(base + url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   try {
-    const config = aiConfig(); assert.equal(config.models.length, 9);
+    const config = aiConfig(); assert.equal(config.models.length, 10);
     assert.match(config.models[0].description, /轻快响应/);
-    assert.match(config.models[1].description, /推理与分析/);
-    assert.match(config.models[2].description, /推理与分析/);
+    assert.match(config.models[1].description, /长上下文与多模态/);
+    assert.match(config.models[2].description, /工具协作/);
+    assert.match(config.models.find(m => canonicalModelId(m.id) === "claude-5-opus").description, /代码处理/);
+    assert.match(modelTraits("deepseek-v4-pro"), /代码分析/);
+    assert.match(config.models.find(m => canonicalModelId(m.id) === "glm-5.2").description, /长上下文/);
+    assert.notEqual(modelTraits("gemini-2.5-pro"), modelTraits("gemini-3.1-pro-preview"));
+    assert.notEqual(modelTraits("claude-5-opus"), modelTraits("claude-4.8-opus"));
     assert.ok(config.models.every(model => !/图片|图像|验证|秒/.test(model.description)));
-    assert.equal(config.channels[0].modelCount, 2); assert.equal(config.channels[1].modelCount, 12); assert.equal(config.channels[2].state, "empty");
-    assert.deepEqual(config.models.filter(m => m.brand === "claude").map(m => canonicalModelId(m.id)), ["claude-5-opus", "claude-fable-5"]);
+  assert.equal(config.channels.find(channel => channel.slot === 1).modelCount, 12);
+    assert.equal(config.channels.find(channel => channel.slot === 2).modelCount, 2);
+    assert.equal(config.channels.find(channel => channel.slot === 3).modelCount, 12);
+    assert.equal(config.channels.find(channel => channel.slot === 4).state, "empty");
+    assert.deepEqual(config.models.filter(m => m.brand === "claude").map(m => canonicalModelId(m.id)), ["claude-5-opus"]);
     assert.ok(config.models.filter(m => m.brand === "claude").every(m => m.icon === "/assets/Claude.svg"));
     assert.ok(config.models.some(m => canonicalModelId(m.id) === "glm-5.2"));
-    for (const removed of ["gpt-5.4", "gemini-4-argon", "claude-fable-5.1", "claude-4.8-opus"]) {
+    for (const removed of ["claude-fable-5", "claude-fable-5.1", "claude-4.8-opus"]) {
       assert.ok(!config.models.some(m => canonicalModelId(m.id) === removed));
       await assert.rejects(complete("fuka:[新]" + removed, []), /请选择/);
     }
     assert.equal(config.models.filter(m => m.id === "jianzhile:gpt-6-sol").length, 1);
     const gpt = config.models.filter(m => m.brand === "openai");
-    assert.equal(gpt.length, 2); assert.ok(gpt.every(m => m.icon === "/assets/OpenAI.svg"));
+    assert.equal(gpt.length, 3); assert.ok(gpt.every(m => m.icon === "/assets/OpenAI.svg"));
     assert.equal(config.models.find(m => m.id === "fuka:deepseek-v4").icon, "/assets/deepseek.svg");
     assert.equal(config.models.filter(m => m.name === "Gemini 3.8 Flash").length, 1);
     assert.equal(canonicalModelId("[奇异果]claude-4.6-opus-thinking㉗"), "claude-4.6-opus-thinking");
     assert.notEqual(canonicalModelId("claude-4.6-opus-thinking"), canonicalModelId("claude-4.6-opus"));
     assert.equal(displayModelName("[鸢尾花]gemini-3.1-pro-preview-search②"), "Gemini 3.1 Pro Preview Search");
+    assert.equal(displayModelName("deepseek-flash-1017"), "DeepSeek V4.1 Flash");
+    assert.match(modelTraits("deepseek-flash-1017"), /轻快响应与高吞吐/);
+    assert.equal(displayModelName("deepseek:deepseek-flash-1017"), "DeepSeek V4.1 Flash");
+    assert.match(modelTraits("deepseek:deepseek-flash-1017"), /轻快响应与高吞吐/);
     const publicConfig = JSON.stringify(config); assert.ok(tokens.every(token => !publicConfig.includes(token))); assert.ok(!publicConfig.includes('"key"'));
     assert.equal(await complete("[故人情]gemini-3.8-flash", [{ role: "user", content: "虚构测试" }]), "原有通道正确");
     assert.equal(calls.at(-1).authorization, "Bearer " + tokens[0]);
