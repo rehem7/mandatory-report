@@ -181,7 +181,7 @@ function chatCard(training = false) {
 function updateChat() {
   if (!$("chat-messages")) return;
   stopQuestions();
-  $("chat-messages").innerHTML = current ? messagesHTML(current) : `<div class="chat-welcome"><div class="welcome-scene"><div class="welcome-copy"><span class="visual-eyebrow">从看见孩子，到站在孩子身边</span><h2>先聊聊您遇到的情况。</h2><p>关于孩子的不安、求助和需要，<br>我们一起理清保护的下一步。</p><div class="welcome-assurance"><span>${icon("listen")}认真倾听</span><span>${icon("shield")}保护隐私</span></div></div>${art('reading', 'welcome-art', true)}</div><div id="question-carousel" class="question-carousel" aria-live="off"><div id="quick-questions" class="question-examples">${questionButtons()}</div></div></div>`;
+  $("chat-messages").innerHTML = current ? messagesHTML(current) : `<div class="chat-welcome"><div class="welcome-scene"><div class="welcome-copy"><span class="visual-eyebrow">从看见孩子，到站在孩子身边</span><h2>先聊聊您遇到的情况。</h2><p>关于孩子的不安、求助和需要，<br>我们一起理清保护的下一步。</p><div class="welcome-assurance"><span>${icon("listen")}认真倾听</span><span>${icon("shield")}保护隐私</span></div></div>${art('mascot-question', 'welcome-art', true)}</div><div id="question-carousel" class="question-carousel" aria-live="off"><div id="quick-questions" class="question-examples">${questionButtons()}</div></div></div>`;
   if (!current) startQuestions();
   const retry = $("chat-retry");
   const pending = current?.messages.at(-1)?.role === "user";

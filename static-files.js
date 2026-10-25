@@ -9,7 +9,8 @@ const routes = new Map(Object.entries({
 for (const name of ['login.css', 'login.js', 'account.js', 'style.css', 'portal.css', 'portal.js', 'shell.js', 'report.js', 'receiver.js', 'common.js', 'model-brand.js', 'event-stream.js', 'report-drafts.js', 'report-tags.js', 'icons.js', 'visual.js', 'visual.css', 'activity-view.js', 'stroke-text.js', 'login-title-paths.js', 'bounce-cards.js', 'specular-button.js', 'specular-light.js']) routes.set('/' + name, name);
 for (const name of ['Gemini.svg', 'OpenAI.svg', 'Claude.svg', 'deepseek.svg', 'GROK.svg', 'GLM.svg', 'kimi.svg', 'minimax-color.svg', 'longcat-bright.svg', 'AI.svg', 'login-child-before.png', 'login-child-after.png']) routes.set('/assets/' + name, 'assets/' + name);
 for (const name of ['children-support.svg', 'children-learning.svg', 'children-reading.svg', 'children-care.svg', 'children-play.svg', 'guardian-mark.svg', 'illustration-sources.json', 'icon-sources.json', 'adult-avatar-1.png', 'adult-avatar-2.png', 'adult-avatar-3.png', 'adult-avatar-4.png', 'adult-avatar-5.png', 'avatar-sources.json', 'licenses/lucide.txt', 'licenses/react-bits.txt']) routes.set('/assets/visual/' + name, 'assets/visual/' + name);
-const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain; charset=utf-8', '.json': 'application/json; charset=utf-8' };
+for (const name of ['guardian-question.png', 'guardian-confident.png', 'guardian-expressions.jpg']) routes.set('/assets/mascot/' + name, 'assets/mascot/' + name);
+const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.txt': 'text/plain; charset=utf-8', '.json': 'application/json; charset=utf-8' };
 for (const name of ['markdown.js', 'vendor/markdown-it.js', 'assets/visual/licenses/markdown-it.txt', 'assets/visual/licenses/markdown-it-cjk-friendly.txt', 'assets/visual/licenses/east-asian-width.txt']) routes.set('/' + name, name);
 const digest = value => crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
 
@@ -25,7 +26,7 @@ export function staticFiles(root) {
     if (ext === '.html' || ext === '.js') {
       let source = original.toString('utf8');
       // Keep the complete module graph on the same release, including its imports.
-      source = source.replace(/(["'])(\/(?:assets\/)?[^"'\s?]+\.(?:js|css|svg|png))\1/g, (all, quote, url) => quote + version(url) + quote);
+      source = source.replace(/(["'])(\/(?:assets\/)?[^"'\s?]+\.(?:js|css|svg|png|jpe?g))\1/g, (all, quote, url) => quote + version(url) + quote);
       if (name === 'portal.html' || name === 'report.html') {
         const modules = ['common.js', 'icons.js', 'visual.js', 'account.js', 'shell.js', 'report-drafts.js', 'event-stream.js', 'model-brand.js'];
         source = source.replace('</head>', modules.map(module => `<link rel="modulepreload" href="${version('/' + module)}">`).join('') + '</head>');
@@ -33,7 +34,7 @@ export function staticFiles(root) {
       buffer = Buffer.from(source);
     }
     const representations = { identity: buffer };
-    if (ext !== '.png' && buffer.length > 512) {
+    if (!['.png', '.jpg'].includes(ext) && buffer.length > 512) {
       representations.br = brotliCompressSync(buffer, { params: { [constants.BROTLI_PARAM_QUALITY]: 4 } });
       representations.gzip = gzipSync(buffer, { level: 6 });
     }

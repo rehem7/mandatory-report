@@ -36,3 +36,13 @@
 @media(min-width:1200px){.welcome-scene{grid-template-columns:minmax(0,1fr) 250px}.public-page .welcome-art{width:250px;height:190px}.children-banner{grid-template-columns:minmax(0,1fr) 250px;padding-top:16px;padding-bottom:16px}.children-banner .banner-art{width:250px;height:218px;transform:scale(1.18)}}
 @media(max-width:850px){.public-page .chat-layout .chat-welcome{min-height:0}.children-banner .banner-art{transform:scale(1.1)}}
 @media(max-width:767px){.children-banner{grid-template-columns:minmax(0,1fr) 124px}.children-banner .banner-art{width:124px;height:144px}}
+
+/* Keep the supplied character proportions and blend its white paper into each surface. */
+.mascot-art{mix-blend-mode:multiply}
+.public-page .welcome-art.mascot-art{width:190px;height:220px;justify-self:center}
+.children-banner .banner-art.mascot-art{width:210px;height:210px;justify-self:center;transform:none}
+.mascot-sprite{position:relative;overflow:hidden;aspect-ratio:1}
+.mascot-sprite>img{position:absolute;display:block;width:300%;height:300%;max-width:none;left:-200%;top:-200%;pointer-events:none;user-select:none}
+.public-page .illustrated-empty>.mascot-sprite{height:auto;aspect-ratio:1}
+@media(max-width:1199px){.public-page .welcome-art.mascot-art{width:150px;height:190px}.children-banner .banner-art.mascot-art{width:170px;height:180px}}
+@media(max-width:767px){.public-page .welcome-art.mascot-art{width:112px;height:145px}.children-banner .banner-art.mascot-art{width:124px;height:144px}}
