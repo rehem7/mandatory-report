@@ -21,6 +21,7 @@ test("官方 DeepSeek 读取独立密钥，兼容 Flash 官方别名并保持界
   try {
     const { complete, aiConfig } = await import("../ai.js");
     const config = aiConfig(), flash = config.models.find(model => model.id === config.defaultModel);
+    assert.equal(config.models.length, 2);
     assert.equal(flash.name, "DeepSeek V4.1 Flash");
     assert.match(flash.description, /高吞吐/);
     assert.equal(await complete(flash.id, [{ role: "user", content: "test" }]), "OK");

@@ -38,9 +38,9 @@ const excludedModels = new Set([
 ]);
 const domesticBrands = new Set(["deepseek", "glm", "kimi", "minimax", "longcat"]);
 const chatCapable = id => !/(?:embedding|rerank|whisper|tts|dall-e|image|imagen|veo|sora|stable-diffusion|flux)/i.test(id);
-if (deepseekKey) {
+{
   let flashUpstreamId = "deepseek-flash-1017";
-  if (process.env.AI_CATALOG_ENABLED !== "0") {
+  if (deepseekKey && process.env.AI_CATALOG_ENABLED !== "0") {
     try {
       const response = await fetch(deepseek + "/models", { headers: { Authorization: `Bearer ${deepseekKey}` }, redirect: "error", signal: AbortSignal.timeout(15000) });
       const catalog = response.ok ? await response.json() : null;
@@ -55,9 +55,9 @@ if (deepseekKey) {
     const id = "deepseek:" + (definition.publicId || definition.upstreamId);
     routes.set(id, [{ endpoint: deepseek, key: deepseekKey, upstreamId: definition.upstreamId }]);
     identities.set(canonicalModelId(definition.upstreamId), id);
-    publicModels.push({ id, name: definition.name, ...modelBrand(definition.upstreamId), provider: "api.deepseek.com", available: true });
+    publicModels.push({ id, name: definition.name, ...modelBrand(definition.upstreamId), provider: "api.deepseek.com", available: !!deepseekKey });
   }
-  channels.push({ slot: "deepseek", configured: true, state: "ready", modelCount: 2 });
+  channels.push({ slot: "deepseek", configured: !!deepseekKey, state: deepseekKey ? "ready" : "missing", modelCount: 2 });
 }
 async function discover(slot) {
   const keyName = slot === 1 ? "FREE_API_KEY" : "FREE_API_KEY_" + slot;
@@ -108,11 +108,12 @@ export function modelRoutes(id) {
 export const routeKey = route => crypto.createHash('sha256').update([route.endpoint, route.upstreamId, route.key].join('\n')).digest('hex');
 export function verifiedImageRoutes(id, checks = []) { return modelRoutes(id).filter(route => checks.some(c => c.routeKey === routeKey(route) && c.status === 'verified' && Date.now() - Date.parse(c.checkedAt) < 30 * 86400000)).map(routeKey); }
 export function modelConfig(checks = [], observations = []) {
-  const models = publicModels.map(m => {
+  // Retain historical routes internally; only the two official models are selectable.
+  const models = publicModels.filter(m => m.provider === "api.deepseek.com").map(m => {
     const verified = verifiedImageRoutes(m.id, checks), check = checks.filter(c => verified.length ? verified.includes(c.routeKey) : modelRoutes(m.id).some(r => routeKey(r) === c.routeKey)).sort((a, b) => b.checkedAt.localeCompare(a.checkedAt))[0];
     const observation = observations.find(o => o.modelId === m.id);
     const speedNote = observation ? `最近请求约${(observation.elapsedMs / 1000).toFixed(1)}秒（含工具，仅供参考）` : check?.elapsedMs ? `最近图片检测约${(check.elapsedMs / 1000).toFixed(1)}秒，仅供参考` : '速度暂无实测数据';
-    return { ...m, imageSupport: { status: verified.length ? 'verified' : 'unverified', checkedAt: check?.checkedAt || null }, description: modelTraits(m.id), speedNote };
+    return { ...m, available: !!deepseekKey, imageSupport: { status: verified.length ? 'verified' : 'unverified', checkedAt: check?.checkedAt || null }, description: modelTraits(m.id), speedNote };
   });
-  return { configured: publicModels.some(m => m.available), models, defaultModel: deepseekKey ? "deepseek:deepseek-flash-1017" : primaryKey ? legacyModels[0].id : publicModels.find(m => m.available)?.id || legacyModels[0].id, provider: "多通道模型服务", channels, knowledgeBase: false, capabilities: { search: { enabled: true, strength: "medium", mode: "application-tool", maxResults: 5 }, images: true, memory: true, reportDrafts: true } };
+  return { configured: !!deepseekKey, models, defaultModel: "deepseek:deepseek-flash-1017", provider: "DeepSeek 官方服务", channels, knowledgeBase: false, capabilities: { search: { enabled: true, strength: "medium", mode: "application-tool", maxResults: 5 }, images: true, memory: true, reportDrafts: true } };
 }

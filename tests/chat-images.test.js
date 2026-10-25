@@ -29,11 +29,11 @@ test('图片真实传输、能力检测及失败不误判，重试停止和账�
   });
   await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mandatory-images-'));
-  Object.assign(process.env, { DATA_DIR: dir, AI_CATALOG_ENABLED: '0', FREE_API_KEY: 'local-image-test', AI_BASE_URL: `http://127.0.0.1:${upstream.address().port}/v1` });
+  Object.assign(process.env, { DATA_DIR: dir, AI_CATALOG_ENABLED: '0', DEEPSEEK_API_KEY: 'local-image-test', DEEPSEEK_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}/v1` });
   const { colorChallenge } = await import('../image-probe.js');
   const { server } = await import('../server.js'); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const { complete } = await import('../ai.js');
-  const base = `http://127.0.0.1:${server.address().port}`, a = sessionClient(base), stranger = sessionClient(base), model = '[故人情]gemini-3.8-flash';
+  const base = `http://127.0.0.1:${server.address().port}`, a = sessionClient(base), stranger = sessionClient(base), model = 'deepseek:deepseek-flash-1017';
   const call = async (url, body, client = a) => { const r = await client(url, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }); return { status: r.status, data: await r.json() }; };
   const images = [{ name: '无隐私测试.png', mime: 'image/png', data: colorChallenge().data }];
   try {
@@ -44,7 +44,7 @@ test('图片真实传输、能力检测及失败不误判，重试停止和账�
     assert.match(check.data.config.models[0].description, /轻快响应/); assert.doesNotMatch(check.data.config.models[0].description, /图片|图像|验证/); assert.equal(check.data.config.models[0].imageSupport.status, 'verified');
     const response = await call(prefix + '/messages', { model, content: '描述图片', images }); assert.equal(response.status, 200);
     const last = requests.at(-1).messages.findLast(m => m.role === 'user'); assert.equal(last.content[1].type, 'image_url'); assert.match(last.content[1].image_url.url, /^data:image\/png;base64,/);
-    const another = '[故人情]gemini-2.5-pro'; await call('/api/ai/image-check', { model: another });
+    const another = 'deepseek:deepseek-v4-pro'; await call('/api/ai/image-check', { model: another });
     const beforeSwitch = requests.length;
     assert.equal((await call(prefix + '/messages', { model: another, content: '切换模型继续' })).status, 400, '历史图片不得随模型切换转交另一模型'); assert.equal(requests.length, beforeSwitch);
     assert.equal((await call(prefix, undefined, stranger)).status, 404); assert.equal(response.data.messages[0].images[0].data, images[0].data);

@@ -92,7 +92,7 @@ test("增量即时传递、刷新进度、完成落库、中断重试、断连�
     assert.equal((await get(training.id, "teacher-1")).busy, false);
     assert.equal((await (await fetch(base + "/api/reports")).json()).length, 0);
     const names = (await (await fetch(base + "/api/ai/config")).json()).models.map(m => m.name);
-    assert.ok(names.every(name => name.startsWith("Gemini ")));
+    assert.deepEqual(names, ["DeepSeek V4.1 Flash", "DeepSeek V4 Pro"]);
     assert.match((await fetch(base + "/assets/Gemini.svg")).headers.get("content-type"), /image\/svg\+xml/);
   } finally {
     release(); server.closeAllConnections(); upstream.closeAllConnections();

@@ -68,7 +68,7 @@ npm start
 
 Windows 下优先使用显式传入的进程变量（空值表示禁用该密钥），未传入时依次读取用户和系统环境变量。配置官方 DeepSeek 密钥后，新对话默认使用官方 Flash。Flash 根据官方目录选择 `deepseek-flash-1017` 或 `deepseek-flash`，界面统一显示为 DeepSeek V4.1 Flash。目录可读取不代表聊天额度可用；余额不足、无可用通道和鉴权失败会分别提示。
 
-可用模型取决于密钥权限与模型目录。未配置密钥时仍可浏览页面，AI 功能需有效配置。`PORT` 和 `DATA_DIR` 可分别指定端口与数据目录；默认数据保存在 `data/database.json`。
+模型列表仅保留官方 DeepSeek V4.1 Flash 和 DeepSeek V4 Pro；其他通道的目录不会添加到可选列表中。未配置官方密钥时仍可浏览页面，AI 功能需有效配置。`PORT` 和 `DATA_DIR` 可分别指定端口与数据目录；默认数据保存在 `data/database.json`。
 
 ## 测试
 
