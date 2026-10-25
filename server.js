@@ -11,6 +11,7 @@ import { gzipSync } from "node:zlib";
 import { MAX_BODY_BYTES, attachmentsOf, attachmentMetadata, normalizeAttachments } from "./attachments.js";
 import { resolveRegion } from "./public/regions.js";
 import { handleShareLink } from "./share-links.js";
+import { resetDemoData } from "./demo-data.js";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const serveStatic = staticFiles(root);
 const dir = process.env.DATA_DIR || path.join(root, "data");
@@ -69,6 +70,15 @@ export const server = http.createServer(async (req, res) => {
       if (await handlePortal(req, res, url, db, save, body, reply)) return;
       if (url.pathname === "/api/my-reports" && req.method === "GET") return reply(res, 200, db.reports.filter(r => r.ownerId === req.actor.ownerId).map(({ id, status, receivedAt }) => ({ id, status, receivedAt })));
       if (!roles.includes(role)) return reply(res, 403, { error: "无效演示部门" });
+      if (url.pathname === "/api/demo/reset" && req.method === "POST") {
+        if (role !== "公安") return reply(res, 403, { error: "请从演示首页重置样例" });
+        const b = await body(req);
+        if (b.confirm !== "reset-demo-data") return reply(res, 400, { error: "请确认重建演示样例" });
+        const result = resetDemoData(db);
+        log("系统", "重置虚构演示数据，保留已有报告与账号记录", null);
+        supervise();
+        return reply(res, 200, { ...result, message: "已重建6条演示样例，覆盖公安、民政、教育、妇联及检察监督。已有提交、账号和对话均已保留。" });
+      }
       supervise();
       if (url.pathname === "/api/assess" && req.method === "POST") return reply(res, 200, assess(await body(req)));
       if (url.pathname === "/api/reports" && req.method === "POST") {

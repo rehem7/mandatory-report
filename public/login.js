@@ -1,5 +1,15 @@
-import { post } from "/common.js";
+import { post, toast } from "/common.js";
 const $ = id => document.getElementById(id);
+$("reset-demo-data").onclick = async () => {
+  if (!window.confirm("重建6条虚构演示样例，覆盖公安、民政、教育、妇联和检察监督。只重置这些样例，保留已有提交、账号、对话和草稿。是否继续？")) return;
+  const button = $("reset-demo-data");
+  button.disabled = true; button.textContent = "正在重置…";
+  try {
+    const result = await post("/api/demo/reset", { confirm: "reset-demo-data" });
+    toast(result.message);
+  } catch (error) { toast(error.message); }
+  finally { button.disabled = false; button.textContent = "↻ 重置演示数据"; }
+};
 // Keep the form usable immediately; decorate after the initial page has painted.
 const enhance = () => {
   Promise.allSettled([
