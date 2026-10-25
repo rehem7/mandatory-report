@@ -74,10 +74,13 @@ export const server = http.createServer(async (req, res) => {
         if (role !== "公安") return reply(res, 403, { error: "请从接收工作台重置案例数据" });
         const b = await body(req);
         if (b.confirm !== "reset-demo-data") return reply(res, 400, { error: "请确认重建演示样例" });
+        const backupDir = path.join(dir, "backups");
+        fs.mkdirSync(backupDir, { recursive: true });
+        fs.writeFileSync(path.join(backupDir, "before-receiver-reset-" + new Date().toISOString().replace(/[:.]/g, "-") + "-" + crypto.randomBytes(3).toString("hex") + ".json"), JSON.stringify(db, null, 2));
         const result = resetDemoData(db);
-        log("系统", "重置案例库回放数据，保留已有报告与账号记录", null);
+        log("系统", "恢复接收端基准案例，清除旧线索与办理记录", null);
         supervise();
-        return reply(res, 200, { ...result, message: `已载入${result.created}条公开案例，覆盖公安、民政、教育、妇联及检察监督。已有提交、账号和对话均已保留。` });
+        return reply(res, 200, { ...result, backupSaved: true, message: `已恢复${result.created}条基准案例，旧线索和办理记录已清除。重置前数据已备份，账号、对话和草稿保留。` });
       }
       supervise();
       if (url.pathname === "/api/assess" && req.method === "POST") return reply(res, 200, assess(await body(req)));

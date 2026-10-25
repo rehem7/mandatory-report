@@ -1,24 +1,26 @@
 import { esc, time, api, post, toast, icon, openDialog, bindDialog } from "/common.js";
 import { reportTags } from "/report-tags.js";
 import { installVisuals } from "/visual.js";
+import { matchesQueueFilter, receiverStatCards } from "/receiver-filters.js";
 installVisuals(document.body);
 
 function riskTags(r) { const tags = reportTags(r.types); return tags.length ? `<div class="risk-situation-tags" aria-label="报告情形标签">${tags.map(t => `<span class="badge situation-tag">${esc(t)}</span>`).join("")}</div>` : ""; }
 
 const $ = id => document.getElementById(id);
 $("reset-demo-data").onclick = async () => {
-  if (!window.confirm("重置案例库回放数据？已有提交、账号、对话和草稿都会保留。")) return;
+  if (!window.confirm("恢复到12条基准案例？这将清除当前全部接收线索及办理记录，并先保存备份。账号、对话和草稿不受影响。")) return;
   const button = $("reset-demo-data");
   button.disabled = true; button.textContent = "正在重置…";
   try {
     const result = await post("/api/demo/reset", { confirm: "reset-demo-data" });
     if (dialog.open) dialog.close();
+    queueFilter = "all";
     ["search", "status-filter", "tag-filter", "anonymous-filter"].forEach(id => $(id).value = "");
     await refresh(); toast(result.message);
   } catch (error) { toast(error.message); }
   finally { button.disabled = false; button.textContent = "↻ 重置 Mock 数据"; }
 };
-let role = "公安", list = [], selected = null, loading = false, opening = false, acting = false;
+let role = "公安", list = [], selected = null, loading = false, opening = false, acting = false, queueFilter = "all";
 const labels = { A: "强制报告监管", B: "帮扶风险", C: "待人工核实" };
 const departments = {
   公安: { icon: "shield", subtitle: "线索总览与处置", eyebrow: "POLICE WORKSPACE", title: "线索接收工作台", description: "从接收、研判到处置，让每一条线索有迹可循。" },
@@ -44,7 +46,7 @@ function navigation() {
 $("roles").onclick = async e => {
   const button = e.target.closest("[data-role]");
   if (!button || button.dataset.role === role) return;
-  role = button.dataset.role; selected = null; list = [];
+  role = button.dataset.role; selected = null; list = []; queueFilter = "all";
   if (dialog.open) dialog.close();
   ["search", "status-filter", "tag-filter", "anonymous-filter"].forEach(id => $(id).value = "");
   $("logs").textContent = "点击“加载日志”查看最近的操作记录。";
@@ -99,30 +101,22 @@ function render() {
   $("search").placeholder = prosecutor ? "搜索线索编号" : "搜索编号、地点或描述";
   $("queue-description").textContent = police ? "AI 建议仅供参考，定性需由公安人工复核。" : prosecutor ? "仅展示监督摘要，完整案卷按法定流程调取。" : "仅展示公安共享的脱敏信息，可记录帮扶或升级回公安。";
   $("table-scope").textContent = police ? "公安可查看完整报告" : prosecutor ? "检察端仅查看监督摘要" : "本部门仅查看已分流的脱敏线索";
-  const stats = police ? [
-    ["收到线索", list.length, "inbox", "当前接收的全部线索"],
-    ["待人工复核", list.filter(r => !r.confirmedTag).length, "review", "AI 建议等待人工确认"],
-    ["A 类监管", list.filter(r => r.confirmedTag === "A").length, "shield", "已人工确认的监管线索"],
-    ["监督线索", list.filter(r => r.supervision.length).length, "scale", "已推送至检察监督"]
-  ] : prosecutor ? [
-    ["监督摘要", list.length, "inbox", "当前收到的监督线索"],
-    ["超期未处置", list.filter(r => r.supervision.some(s => s.reason === "超期未处置")).length, "clock", "超过 24h 处置时限"],
-    ["不予立案", list.filter(r => r.supervision.some(s => s.reason === "不予立案")).length, "file", "A 类不予立案线索"],
-    ["应报未报", list.filter(r => r.supervision.some(s => s.reason.startsWith("应报未报"))).length, "review", "公安移送监督摘要"]
-  ] : [
-    ["本部门线索", list.length, "inbox", "公安分流至本部门"],
-    ["待帮扶", list.filter(r => !r.helpRecords.length).length, "heart", "尚未登记帮扶记录"],
-    ["已有帮扶记录", list.filter(r => r.helpRecords.length).length, "review", "已开展帮扶的线索"],
-    ["已归档", list.filter(r => r.status === "已归档").length, "file", "已完成阶段处置"]
-  ];
-  $("stats").innerHTML = stats.map(([title, n, symbol, hint]) => `<div class="stat"><div class="stat-label"><span>${title}</span>${icon(symbol)}</div><strong>${n}</strong><p>${hint}</p></div>`).join("");
+  const stats = receiverStatCards(role, list);
+  const focusedFilter = $("stats").contains(document.activeElement) ? document.activeElement.dataset.queueFilter : null;
+  const statHTML = stats.map(([title, n, symbol, hint, key]) => `<button type="button" class="stat${queueFilter === key ? " active" : ""}" data-queue-filter="${key}" aria-pressed="${queueFilter === key}" aria-controls="rows" aria-label="${esc(title)}，${n}条，点击筛选"><span class="stat-label"><span>${title}</span>${icon(symbol)}</span><strong>${n}</strong><span class="stat-hint">${hint}</span></button>`).join("");
+  if ($("stats").innerHTML !== statHTML) {
+    $("stats").innerHTML = statHTML;
+    if (focusedFilter) $("stats").querySelector(`[data-queue-filter="${focusedFilter}"]`)?.focus({ preventScroll: true });
+  }
   const q = $("search").value.trim().toLowerCase();
-  const shown = list.filter(r => [r.id, r.region, r.address, r.description, r.sourceCase?.title].join(" ").toLowerCase().includes(q)
+  const shown = list.filter(r => matchesQueueFilter(r, queueFilter) && [r.id, r.region, r.address, r.description, r.sourceCase?.title].join(" ").toLowerCase().includes(q)
     && (!$("status-filter").value || r.status === $("status-filter").value)
     && (!police || !$("tag-filter").value || ($("tag-filter").value === "pending" ? !r.confirmedTag : r.confirmedTag === $("tag-filter").value))
     && (!police || !$("anonymous-filter").value || r.anonymous === ($("anonymous-filter").value === "yes")));
-  $("queue-count").textContent = list.length;
-  $("result-count").textContent = `显示 ${shown.length} 条 / 共 ${list.length} 条线索`;
+  $("queue-count").textContent = shown.length;
+  const activeTitle = stats.find(stat => stat[4] === queueFilter)?.[0] || "全部线索";
+  $("queue-title").firstChild.textContent = queueFilter === "all" ? "线索队列 " : activeTitle + " · 线索队列 ";
+  $("result-count").textContent = `${queueFilter === "all" ? "" : activeTitle + " · "}显示 ${shown.length} 条 / 共 ${list.length} 条线索`;
   const headings = police ? ["线索与地点", "年龄 / 上报方式", "研判与复核", "处置状态", "剩余时限", "操作"] : prosecutor ? ["线索编号", "公安接收时间", "处置状态", "监督原因", "操作"] : ["线索与区域", "年龄 / 发生时间", "处置状态", "帮扶记录", "操作"];
   $("head").innerHTML = `<tr>${headings.map(t => `<th scope="col">${t}</th>`).join("")}</tr>`;
   const content = shown.length ? shown.map(r => {
@@ -138,8 +132,16 @@ function render() {
 }
 
 $("search").oninput = render;
-["status-filter", "tag-filter", "anonymous-filter"].forEach(id => $(id).onchange = render);
-$("reset-filters").onclick = () => { ["search", "status-filter", "tag-filter", "anonymous-filter"].forEach(id => $(id).value = ""); render(); };
+["status-filter", "tag-filter", "anonymous-filter"].forEach(id => $(id).onchange = () => { queueFilter = "all"; render(); });
+$("reset-filters").onclick = () => { queueFilter = "all"; ["search", "status-filter", "tag-filter", "anonymous-filter"].forEach(id => $(id).value = ""); render(); };
+$("stats").onclick = event => {
+  const button = event.target.closest("[data-queue-filter]");
+  if (!button) return;
+  queueFilter = button.dataset.queueFilter;
+  ["search", "status-filter", "tag-filter", "anonymous-filter"].forEach(id => $(id).value = "");
+  render();
+  document.querySelector(".queue-panel").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+};
 $("refresh").onclick = refresh;
 $("rows").onclick = e => { const button = e.target.closest("[data-id]"); if (button) openCase(button.dataset.id); };
 

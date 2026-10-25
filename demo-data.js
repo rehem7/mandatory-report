@@ -1,13 +1,12 @@
 import crypto from "node:crypto";
 
-const fixtureVersion = "receiver-cases-v2";
-const fixtureVersions = new Set(["receiver-demo-v1", fixtureVersion]);
+const fixtureVersion = "receiver-cases-v3";
 const source2024 = "https://www.spp.gov.cn/spp/xwfbh/dxal/202407/t20240705_659674.shtml";
 const workflowNote = "依据公开案例整理；部门视图、标签和处置操作用于流程回放，不代表本平台实际受理记录。";
 
-// Only independently marked imports are replaced; user submissions stay intact.
+// Restore the receiver's complete report state to the twelve baseline cases.
 export function resetDemoData(db, now = Date.now()) {
-  const oldIds = new Set(db.reports.filter(report => fixtureVersions.has(report.demoFixture)).map(report => report.id));
+  const removed = db.reports.length;
   const rows = [
     {
       title: "姚某甲强奸案：医务人员主动报告", identity: "医护人员", age: "14岁", region: "山东省 · 德州市 · 乐陵市", types: ["性侵害"], tag: "A",
@@ -45,10 +44,46 @@ export function resetDemoData(db, now = Date.now()) {
       period: "2019年5月至12月", publishedAt: "2019-12-20", url: "https://www.spp.gov.cn/spp/jhmyghzdmhmt/201912/t20191220_519508.shtml",
       description: "学生家长向教育部门反映并报警后，公安机关起初未立案。教育局依强制报告制度向检察机关通报，检察机关启动立案监督，公安机关随后立案侦查。法院最终判处被告人有期徒刑一年，并适用从业禁止。",
       supervisionReason: "立案监督：教育部门通报后，检察机关监督推动公安机关立案侦查"
+    },
+    {
+      title: "孙某汝强奸案：医疗机构未报告被追责", identity: "医护人员", age: "未满14岁", region: "辽宁省 · 丹东市 · 东港市", types: ["性侵害"], tag: "A",
+      period: "2021年2月至2022年3月", publishedAt: "2022-05-27", url: "https://www.spp.gov.cn/spp/bhsndn/202205/t20220527_558432.shtml",
+      description: "未成年女孩遭受侵害后曾到医疗机构就诊，接诊人员明知其未满14周岁，仍未履行强制报告义务。女孩母亲获悉情况后报警。法院于2022年3月21日判处被告人有期徒刑十年，相关医疗机构和人员未报告的问题被依法追责。",
+      supervisionReason: "应报未报：医疗机构发现未满14周岁患者怀孕后未履行报告义务"
+    },
+    {
+      title: "陈某甲过失致人死亡案：基层组织报告责任", identity: "医护人员", age: "3岁", region: "上海市 · 普陀区", types: ["其他"], tag: "A",
+      period: "2020年8月至2021年3月", publishedAt: "2022-05-27", url: "https://www.spp.gov.cn/spp/bhsndn/202205/t20220527_558394.shtml",
+      description: "医院发现幼童死亡原因可疑，立即向公安机关报案并报告检察机关。调查发现，基层组织此前已注意到异常养育及伤情线索，但未及时报告。法院于2021年3月19日以过失致人死亡罪判处被告人有期徒刑二年、缓刑二年。",
+      supervisionReason: "应报未报：基层组织发现异常养育及伤情线索后未及时报告"
+    },
+    {
+      title: "张某猥亵儿童案：学校瞒报被追责", identity: "教师/教育工作者", age: "未披露", region: "安徽省 · 合肥市", types: ["性侵害"], tag: "A", department: "教育",
+      period: "2019年下半年至2020年10月", publishedAt: "2022-05-27", url: "https://www.spp.gov.cn/spp/bhsndn/202205/t20220527_558433.shtml",
+      description: "某小学教师侵害多名学生，学校负责人获悉后仅私下协调赔偿，未按规定报告。法院依法判处被告人有期徒刑四年，相关学校负责人因履职失责受到处理。",
+      helpSummary: "学校负责人获悉侵害线索后未及时报告，相关责任人员被追责。教育视图用于回放学校报告责任、问题整改与保护机制衔接。",
+      helpNote: "公开案例记载：学校相关负责人因未履行报告职责受到追责处理。",
+      supervisionReason: "应报未报：学校知悉侵害线索后私下协调，未依法报告"
+    },
+    {
+      title: "许某某等人强奸案：住宿经营者未报告被处罚", identity: "其他", identityOther: "住宿经营者", age: "未披露", region: "广西壮族自治区 · 桂林市 · 七星区", types: ["性侵害"], tag: "A",
+      period: "2021年6月至10月", publishedAt: "2022-05-27", url: "https://www.spp.gov.cn/xwfbh/wsfbt/202205/t20220527_557995.shtml",
+      description: "宾馆接待成年人与未成年人共同入住时，发现未成年人状态异常，仍未严格落实身份核验、询问和报告要求。案件发生后，相关犯罪人员被依法追究刑事责任，宾馆因未履行报告等职责受到处罚。",
+      supervisionReason: "应报未报：住宿经营者发现未成年人异常入住情况后未及时核验、询问和报告"
+    },
+    {
+      title: "李某某强奸案：住宿经营者及时保护并报告", identity: "其他", identityOther: "住宿经营者", age: "12岁", region: "贵州省 · 毕节市 · 威宁县", types: ["性侵害"], tag: "A",
+      period: "2022年10月至2023年4月", publishedAt: "2024-07-05", url: source2024,
+      description: "宾馆经营者发现入住未成年人神情恐惧、抗拒同住成年人，且二人年龄差距及身份关系异常，先将孩子带至前台保护并立即报警。案件得到及时查处，法院于2023年4月10日判处被告人有期徒刑五年六个月。"
+    },
+    {
+      title: "韦某虐待小菲案：班主任报告衔接保护安置", identity: "教师/教育工作者", age: "小学二年级（年龄未披露）", region: "浙江省 · 台州市 · 临海市", types: ["身体虐待"], tag: "A",
+      period: "具体时间见来源原文", publishedAt: "2022-05-30", url: "https://www.spp.gov.cn/spp/zdgz/202205/t20220530_558447.shtml",
+      description: "班主任家访时发现学生持续遭受家庭暴力，依强制报告要求报告。检察机关介入后推动案件由自诉转为公诉，并衔接心理支持、临时安置与家庭教育指导。法院以虐待罪判处被告人有期徒刑一年、缓刑二年。"
     }
   ];
   const reports = rows.map((row, index) => ({
-    id: `CASE-${crypto.randomBytes(4).toString("hex").toUpperCase()}-${index + 1}`,
+    id: `CASE-BASE-${String(index + 1).padStart(3, "0")}`,
     receipt: crypto.randomBytes(24).toString("hex"), demoFixture: fixtureVersion,
     ownerId: "demo-fixtures", identity: row.identity, identityOther: row.identityOther || "", typeOther: "",
     region: row.region, address: "具体地址未公开", occurredAt: null, age: row.age,
@@ -60,10 +95,10 @@ export function resetDemoData(db, now = Date.now()) {
     helpSummary: row.helpSummary || "", helpRecords: row.helpNote ? [{ department: row.department, note: row.helpNote, time: null }] : [],
     supervision: row.supervisionReason ? [{ reason: row.supervisionReason, time: null }] : []
   }));
-  db.reports = [...reports, ...db.reports.filter(report => !oldIds.has(report.id))];
-  db.logs = db.logs.filter(entry => !oldIds.has(entry.reportId));
+  db.reports = reports;
+  db.logs = [];
   for (const report of reports) {
     db.logs.push({ id: crypto.randomUUID(), role: "系统", action: "导入公开案例回放：" + report.sourceCase.title, reportId: report.id, time: new Date(now).toISOString() });
   }
-  return { created: reports.length, preserved: db.reports.length - reports.length };
+  return { created: reports.length, removed };
 }

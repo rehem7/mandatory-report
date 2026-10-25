@@ -26,6 +26,7 @@ routes.set('/assets/visual/fayu-qinghe-logo.png', 'assets/visual/fayu-qinghe-log
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.txt': 'text/plain; charset=utf-8', '.json': 'application/json; charset=utf-8' };
 for (const name of ['markdown.js', 'vendor/markdown-it.js', 'assets/visual/licenses/markdown-it.txt', 'assets/visual/licenses/markdown-it-cjk-friendly.txt', 'assets/visual/licenses/east-asian-width.txt']) routes.set('/' + name, name);
 for (const name of ['accessibility.css', 'learning.js', 'chat-images.js', 'report-review.js', 'attachment-policy.js', 'region-data.js', 'regions.js', 'region-picker.js', 'help-tour.js', 'assets/visual/licenses/lcn.txt']) routes.set('/' + name, name);
+routes.set('/receiver-filters.js', 'receiver-filters.js');
 const digest = value => crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
 
 export function staticFiles(root) {
