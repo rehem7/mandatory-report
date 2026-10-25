@@ -45,8 +45,8 @@ function supervise() {
 }
 function view(r, role) {
   if (role === "公安") { const { attachment, attachments, ...report } = r; const files = attachmentMetadata(attachmentsOf(r)); return { ...report, attachments: files, attachment: files[0] || null }; }
-  if (role === "检察院") return { id: r.id, receivedAt: r.receivedAt, status: r.status, supervision: r.supervision };
-  return { id: r.id, types: r.types, age: r.age, region: r.region, occurredAt: r.occurredAt, description: r.helpSummary, status: r.status, department: r.department, helpRecords: r.helpRecords, receivedAt: r.receivedAt };
+  if (role === "检察院") return { id: r.id, receivedAt: r.receivedAt, status: r.status, supervision: r.supervision, sourceCase: r.sourceCase };
+  return { id: r.id, types: r.types, age: r.age, region: r.region, occurredAt: r.occurredAt, description: r.helpSummary, status: r.status, department: r.department, helpRecords: r.helpRecords, receivedAt: r.receivedAt, sourceCase: r.sourceCase };
 }
 const accessible = (r, role) => role === "公安" || (role === "检察院" ? r.supervision.length > 0 : r.department === role);
 function reply(res, status, value) {
@@ -71,13 +71,13 @@ export const server = http.createServer(async (req, res) => {
       if (url.pathname === "/api/my-reports" && req.method === "GET") return reply(res, 200, db.reports.filter(r => r.ownerId === req.actor.ownerId).map(({ id, status, receivedAt }) => ({ id, status, receivedAt })));
       if (!roles.includes(role)) return reply(res, 403, { error: "无效演示部门" });
       if (url.pathname === "/api/demo/reset" && req.method === "POST") {
-        if (role !== "公安") return reply(res, 403, { error: "请从演示首页重置样例" });
+        if (role !== "公安") return reply(res, 403, { error: "请从接收工作台重置案例数据" });
         const b = await body(req);
         if (b.confirm !== "reset-demo-data") return reply(res, 400, { error: "请确认重建演示样例" });
         const result = resetDemoData(db);
-        log("系统", "重置虚构演示数据，保留已有报告与账号记录", null);
+        log("系统", "重置案例库回放数据，保留已有报告与账号记录", null);
         supervise();
-        return reply(res, 200, { ...result, message: "已重建6条演示样例，覆盖公安、民政、教育、妇联及检察监督。已有提交、账号和对话均已保留。" });
+        return reply(res, 200, { ...result, message: `已载入${result.created}条公开案例，覆盖公安、民政、教育、妇联及检察监督。已有提交、账号和对话均已保留。` });
       }
       supervise();
       if (url.pathname === "/api/assess" && req.method === "POST") return reply(res, 200, assess(await body(req)));

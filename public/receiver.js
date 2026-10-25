@@ -6,6 +6,18 @@ installVisuals(document.body);
 function riskTags(r) { const tags = reportTags(r.types); return tags.length ? `<div class="risk-situation-tags" aria-label="报告情形标签">${tags.map(t => `<span class="badge situation-tag">${esc(t)}</span>`).join("")}</div>` : ""; }
 
 const $ = id => document.getElementById(id);
+$("reset-demo-data").onclick = async () => {
+  if (!window.confirm("重置案例库回放数据？已有提交、账号、对话和草稿都会保留。")) return;
+  const button = $("reset-demo-data");
+  button.disabled = true; button.textContent = "正在重置…";
+  try {
+    const result = await post("/api/demo/reset", { confirm: "reset-demo-data" });
+    if (dialog.open) dialog.close();
+    ["search", "status-filter", "tag-filter", "anonymous-filter"].forEach(id => $(id).value = "");
+    await refresh(); toast(result.message);
+  } catch (error) { toast(error.message); }
+  finally { button.disabled = false; button.textContent = "↻ 重置 Mock 数据"; }
+};
 let role = "公安", list = [], selected = null, loading = false, opening = false, acting = false;
 const labels = { A: "强制报告监管", B: "帮扶风险", C: "待人工核实" };
 const departments = {
@@ -45,6 +57,13 @@ function remaining(r) {
   return n <= 0 ? "已超期" : `${Math.floor(n / 3600000)}h ${Math.floor(n % 3600000 / 60000)}m`;
 }
 function statusBadge(status) { return `<span class="badge status ${completeStatuses.includes(status) ? "done" : ""}">${esc(status)}</span>`; }
+const caseTime = report => report.sourceCase ? `${esc(report.sourceCase.publishedAt)} 发布` : time(report.receivedAt);
+function caseSource(report) {
+  const source = report.sourceCase;
+  if (!source) return "";
+  const url = /^https:\/\/www\.spp\.gov\.cn\//.test(source.url) ? source.url : "";
+  return `<section class="case-source"><span class="badge subtle">公开案例回放</span> <strong>${esc(source.title)}</strong><p>来源：${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(source.publisher)} ↗</a>` : esc(source.publisher)} · ${esc(source.publishedAt)} 发布 · 事件时间：${esc(source.eventPeriod)}</p><p class="muted">${esc(source.workflowNote)}</p></section>`;
+}
 
 async function refresh() {
   if (loading) return;
@@ -98,7 +117,7 @@ function render() {
   ];
   $("stats").innerHTML = stats.map(([title, n, symbol, hint]) => `<div class="stat"><div class="stat-label"><span>${title}</span>${icon(symbol)}</div><strong>${n}</strong><p>${hint}</p></div>`).join("");
   const q = $("search").value.trim().toLowerCase();
-  const shown = list.filter(r => [r.id, r.region, r.address, r.description].join(" ").toLowerCase().includes(q)
+  const shown = list.filter(r => [r.id, r.region, r.address, r.description, r.sourceCase?.title].join(" ").toLowerCase().includes(q)
     && (!$("status-filter").value || r.status === $("status-filter").value)
     && (!police || !$("tag-filter").value || ($("tag-filter").value === "pending" ? !r.confirmedTag : r.confirmedTag === $("tag-filter").value))
     && (!police || !$("anonymous-filter").value || r.anonymous === ($("anonymous-filter").value === "yes")));
@@ -107,10 +126,10 @@ function render() {
   const headings = police ? ["线索与地点", "年龄 / 上报方式", "研判与复核", "处置状态", "剩余时限", "操作"] : prosecutor ? ["线索编号", "公安接收时间", "处置状态", "监督原因", "操作"] : ["线索与区域", "年龄 / 发生时间", "处置状态", "帮扶记录", "操作"];
   $("head").innerHTML = `<tr>${headings.map(t => `<th scope="col">${t}</th>`).join("")}</tr>`;
   const content = shown.length ? shown.map(r => {
-    const location = police ? [r.region, r.address].filter(Boolean).join(" ") : r.region;
-    const lead = `<span class="case-number">${esc(r.id)}</span>${!prosecutor ? `<strong class="case-location" title="${esc(location)}">${esc(police ? r.address || r.region : r.region)}</strong><div class="muted">${time(r.receivedAt)}</div>` : ""}`;
-    const cells = police ? `<td>${esc(r.age)}<div class="muted">${esc(r.identity)}</div><span class="badge subtle">${r.anonymous ? "匿名" : "已提供身份信息"}</span></td><td class="tag-cell"><span class="badge ${r.ai.risk === "高" ? "red" : r.ai.risk === "中" ? "amber" : "subtle"}">AI 建议 ${esc(r.ai.tag)} · ${esc(r.ai.risk)}风险</span>${riskTags(r)}<p>${r.confirmedTag ? `人工 ${r.confirmedTag} · ${labels[r.confirmedTag]}` : "○ 待人工复核"}</p></td><td>${statusBadge(r.status)}${r.department ? `<div class="muted">→ ${esc(r.department)}</div>` : ""}</td><td class="deadline-cell"><span class="badge ${remaining(r) === "已超期" ? "red" : "subtle"}">${remaining(r)}</span></td>`
-      : prosecutor ? `<td>${time(r.receivedAt)}</td><td>${statusBadge(r.status)}</td><td>${r.supervision.map(s => `<div class="muted">${esc(s.reason)}</div>`).join("")}</td>`
+    const location = r.sourceCase?.title || (police ? [r.region, r.address].filter(Boolean).join(" ") : r.region);
+    const lead = `<span class="case-number">${esc(r.id)}</span>${r.sourceCase ? '<span class="case-source-label">公开案例</span>' : ""}${!prosecutor ? `<strong class="case-location" title="${esc(location)}">${esc(r.sourceCase?.title || (police ? r.address || r.region : r.region))}</strong><div class="muted">${caseTime(r)}</div>` : ""}`;
+    const cells = police ? `<td>${esc(r.age)}<div class="muted">${esc(r.identity)}</div><span class="badge subtle">${r.sourceCase ? "公开案例" : r.anonymous ? "匿名" : "已提供身份信息"}</span></td><td class="tag-cell"><span class="badge ${r.ai.risk === "高" ? "red" : r.ai.risk === "中" ? "amber" : "subtle"}">${r.sourceCase ? "回放标签" : "AI 建议"} ${esc(r.ai.tag)} · ${esc(r.ai.risk)}风险</span>${riskTags(r)}<p>${r.confirmedTag ? `${r.sourceCase ? "回放" : "人工"} ${r.confirmedTag} · ${labels[r.confirmedTag]}` : "○ 待人工复核"}</p></td><td>${statusBadge(r.status)}${r.department ? `<div class="muted">→ ${esc(r.department)}</div>` : ""}</td><td class="deadline-cell"><span class="badge ${remaining(r) === "已超期" ? "red" : "subtle"}">${remaining(r)}</span></td>`
+      : prosecutor ? `<td>${caseTime(r)}</td><td>${statusBadge(r.status)}</td><td>${r.supervision.map(s => `<div class="muted">${esc(s.reason)}</div>`).join("")}</td>`
       : `<td>${esc(r.age)}<div class="muted">${time(r.occurredAt)}</div></td><td>${statusBadge(r.status)}</td><td>${r.helpRecords.length} 条</td>`;
     return `<tr><td>${lead}</td>${cells}<td><button type="button" data-id="${esc(r.id)}" aria-label="查看线索 ${esc(r.id)}">查看 <span aria-hidden="true">↗</span></button></td></tr>`;
   }).join("") : `<tr><td colspan="${headings.length}" class="empty"><span class="empty-icon">${icon("inbox")}</span><h3>${list.length ? "没有符合筛选条件的线索" : prosecutor ? "暂无监督摘要" : police ? "等待第一条线索" : "暂无分流到本部门的线索"}</h3><p>${list.length ? "试试更换关键词或重置筛选条件。" : police ? '报告线索提交后，将进入接收队列。' : prosecutor ? "公安确认 A 类后，超期或不予立案会自动进入监督。" : "公安确认 B 类并分流后，线索会出现在这里。"}</p></td></tr>`;
@@ -140,11 +159,11 @@ function policeDetail(r) {
   const next = transitions[r.status] || [];
   return `<div class="case-detail-header"><span class="case-number">${esc(r.id)}</span>${statusBadge(r.status)}<span class="badge ${remaining(r) === "已超期" ? "red" : "subtle"}">${remaining(r)}</span></div>
     <div class="case-grid"><section class="case-card"><h3>报告信息</h3><dl class="metadata">
-      ${meta("公安接收时间", time(r.receivedAt))}${meta("24h 处置截止", time(r.deadline))}
+      ${meta(r.sourceCase ? "案例发布日期" : "公安接收时间", caseTime(r))}${meta("24h 处置截止", time(r.deadline))}
       ${meta("上报身份", esc(r.identity) + (r.identityOther ? " · " + esc(r.identityOther) : ""))}${meta("受害人年龄", esc(r.age))}
       ${meta("事件类型", r.types.map(esc).join("、") + (r.typeOther ? " · " + esc(r.typeOther) : ""), true)}
-      ${meta("事件发生时间", time(r.occurredAt), true)}${meta("地点", esc(r.region) + " " + esc(r.address), true)}
-    </dl><h4>事件描述</h4><p class="detail-text">${esc(r.description)}</p><h4>上报人信息 <span class="badge subtle">${r.anonymous ? "匿名报告" : "已提供身份信息"}</span></h4><dl class="metadata">${meta("姓名", esc(r.reporter.name || "未提供"))}${meta("工作单位", esc(r.reporter.organization || "未提供"))}${meta("联系电话", esc(r.reporter.phone || "未提供，无法联系补充信息"), true)}</dl><h4>证据材料</h4>${evidenceLinks(r)}<h4>义务主体提示</h4><p class="muted">${r.obligated ? "疑似报告义务主体，需结合具体身份核实。" : "需结合具体身份核实是否属于报告义务主体。"}</p>${r.helpRecords.length ? `<h4>帮扶回传记录</h4>${helpHistory(r)}` : ""}${r.supervision.length ? `<div class="supervision-note"><h4>已推送检察监督</h4>${supervision(r)}</div>` : ""}</section>
+      ${meta("事件发生时间", r.sourceCase ? esc(r.sourceCase.eventPeriod) : time(r.occurredAt), true)}${meta("地点", esc(r.region) + " " + esc(r.address), true)}
+    </dl><h4>事件描述</h4><p class="detail-text">${esc(r.description)}</p><h4>上报人信息 <span class="badge subtle">${r.sourceCase ? "原文未披露联系方式" : r.anonymous ? "匿名报告" : "已提供身份信息"}</span></h4><dl class="metadata">${meta("姓名", esc(r.reporter.name || "未提供"))}${meta("工作单位", esc(r.reporter.organization || "未提供"))}${meta("联系电话", esc(r.reporter.phone || "未提供，无法联系补充信息"), true)}</dl><h4>证据材料</h4>${evidenceLinks(r)}<h4>义务主体提示</h4><p class="muted">${r.obligated ? "疑似报告义务主体，需结合具体身份核实。" : "需结合具体身份核实是否属于报告义务主体。"}</p>${r.helpRecords.length ? `<h4>帮扶回传记录</h4>${helpHistory(r)}` : ""}${r.supervision.length ? `<div class="supervision-note"><h4>已推送检察监督</h4>${supervision(r)}</div>` : ""}</section>
     <section class="case-card"><h3>研判与处置</h3><div class="summary"><span class="badge">规则建议</span><span class="badge ${r.ai.risk === "高" ? "red" : r.ai.risk === "中" ? "amber" : "subtle"}">${esc(r.ai.risk)}风险</span>${riskTags(r)}<strong>建议 ${esc(r.ai.tag)} 类 · ${labels[r.ai.tag]}</strong><p>${esc(r.ai.reason)}</p><p><b>报告信号：</b>${esc(r.ai.threshold || "需人工核实是否存在疑似侵害或危险")}</p><p><b>疑似侵害：</b>${esc(r.ai.infringement || r.types.join("、"))}</p><p><b>证据建议：</b><br>${r.ai.evidence.map(esc).join("<br>")}</p><p class="muted">规则建议需人工复核，不构成法律意见。</p></div>
       <div class="review-state"><span class="muted">人工确认</span><span class="badge ${r.confirmedTag ? "" : "subtle"}">${r.confirmedTag ? `${r.confirmedTag} · ${labels[r.confirmedTag]}` : "尚未复核"}</span></div>
       <label class="field"><span>复核依据 / 处置记录 <b class="required">*</b></span><textarea id="note" placeholder="填写本次操作依据；分流时填写可共享的脱敏帮扶摘要"></textarea></label>
@@ -170,6 +189,7 @@ async function openCase(id, updated = null) {
     } else if (role !== "公安") {
       $("detail").innerHTML = `<section class="case-card support-detail"><div class="case-detail-header"><span class="case-number">${esc(r.id)}</span>${statusBadge(r.status)}</div><dl class="metadata">${meta("受害人年龄", esc(r.age))}${meta("公安接收时间", time(r.receivedAt))}${meta("所在区域", esc(r.region), true)}</dl><h4>公安提供的脱敏帮扶摘要</h4><p class="detail-text">${esc(r.description)}</p><label class="field"><span>帮扶记录 / 升级原因 <b class="required">*</b></span><textarea id="note" placeholder="记录干预过程；发现侵害信号时，说明升级回公安的原因"></textarea></label><div class="actions"><button type="button" data-action="help" class="primary">保存帮扶记录</button><button type="button" data-action="upgrade">升级回公安 <span aria-hidden="true">↗</span></button></div><h4>历史帮扶记录</h4>${helpHistory(r)}</section>`;
     } else $("detail").innerHTML = policeDetail(r);
+    $("detail").insertAdjacentHTML("afterbegin", caseSource(r));
     openDialog(dialog);
     if (!updated) dialog.scrollTop = 0;
   } catch (e) { toast(e.message); }
