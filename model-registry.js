@@ -32,7 +32,10 @@ const publicModels = legacyModels.map(model => {
 });
 const channels = [];
 const selectedClaude = new Set(["claude-5-opus"]);
-const excludedModels = new Set(["claude-fable-5", "claude-fable-5.1", "claude-4.8-opus"]);
+const excludedModels = new Set([
+  "claude-fable-5", "claude-fable-5.1", "claude-4.8-opus",
+  "gemini-3-pro-preview", "gpt-5.5", "glm-5.1", "glm-5.3"
+]);
 const domesticBrands = new Set(["deepseek", "glm", "kimi", "minimax", "longcat"]);
 const chatCapable = id => !/(?:embedding|rerank|whisper|tts|dall-e|image|imagen|veo|sora|stable-diffusion|flux)/i.test(id);
 if (deepseekKey) {

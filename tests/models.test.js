@@ -15,7 +15,8 @@ test("分密钥发现模型、去重与厂商图标、正确路由和流式回�
     if (req.url === "/v1/models") {
       assert.ok([tokens[0], tokens[2]].includes(req.headers.authorization.slice("Bearer ".length)));
       const ids = ["[镜像]gpt-6-sol①", "deepseek-v4", "[备用]deepseek-v4②", "[镜像]gemini-3.8-flash", "[故人情]gemini-3.8-flash",
-        "[新]gpt-5.4①", "[新]gemini-4-argon③", "[新]claude-5-opus㉗", "[新]claude-fable-5", "[新]claude-fable-5.1", "[新]claude-4.8-opus", "[新]glm-5.2②"];
+        "[新]gpt-5.4①", "[新]gemini-4-argon③", "[新]claude-5-opus㉗", "[新]claude-fable-5", "[新]claude-fable-5.1", "[新]claude-4.8-opus", "[新]glm-5.2②",
+        "[新]gemini-3-pro-preview", "[新]gpt-5.5①", "[新]glm-5.1①", "[新]glm-5.3②"];
       res.writeHead(200, { "Content-Type": "application/json" }); return res.end(JSON.stringify({ data: ids.map(id => ({ id })) }));
     }
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
@@ -71,14 +72,14 @@ test("分密钥发现模型、去重与厂商图标、正确路由和流式回�
     assert.notEqual(modelTraits("gemini-2.5-pro"), modelTraits("gemini-3.1-pro-preview"));
     assert.notEqual(modelTraits("claude-5-opus"), modelTraits("claude-4.8-opus"));
     assert.ok(config.models.every(model => !/图片|图像|验证|秒/.test(model.description)));
-  assert.equal(config.channels.find(channel => channel.slot === 1).modelCount, 12);
+    assert.equal(config.channels.find(channel => channel.slot === 1).modelCount, 16);
     assert.equal(config.channels.find(channel => channel.slot === 2).modelCount, 2);
-    assert.equal(config.channels.find(channel => channel.slot === 3).modelCount, 12);
+    assert.equal(config.channels.find(channel => channel.slot === 3).modelCount, 16);
     assert.equal(config.channels.find(channel => channel.slot === 4).state, "empty");
     assert.deepEqual(config.models.filter(m => m.brand === "claude").map(m => canonicalModelId(m.id)), ["claude-5-opus"]);
     assert.ok(config.models.filter(m => m.brand === "claude").every(m => m.icon === "/assets/Claude.svg"));
     assert.ok(config.models.some(m => canonicalModelId(m.id) === "glm-5.2"));
-    for (const removed of ["claude-fable-5", "claude-fable-5.1", "claude-4.8-opus"]) {
+    for (const removed of ["claude-fable-5", "claude-fable-5.1", "claude-4.8-opus", "gemini-3-pro-preview", "gpt-5.5", "glm-5.1", "glm-5.3"]) {
       assert.ok(!config.models.some(m => canonicalModelId(m.id) === removed));
       await assert.rejects(complete("fuka:[新]" + removed, []), /请选择/);
     }
