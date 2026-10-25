@@ -62,6 +62,10 @@ test("分密钥发现模型、去重与厂商图标、正确路由和流式回�
   const post = (url, body) => fetch(base + url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   try {
     const config = aiConfig(); assert.equal(config.models.length, 9);
+    assert.match(config.models[0].description, /轻快响应/);
+    assert.match(config.models[1].description, /推理与分析/);
+    assert.match(config.models[2].description, /推理与分析/);
+    assert.ok(config.models.every(model => !/图片|图像|验证|秒/.test(model.description)));
     assert.equal(config.channels[0].modelCount, 2); assert.equal(config.channels[1].modelCount, 12); assert.equal(config.channels[2].state, "empty");
     assert.deepEqual(config.models.filter(m => m.brand === "claude").map(m => canonicalModelId(m.id)), ["claude-5-opus", "claude-fable-5"]);
     assert.ok(config.models.filter(m => m.brand === "claude").every(m => m.icon === "/assets/Claude.svg"));

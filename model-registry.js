@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import { models as legacyModels } from "./content.js";
-import { modelBrand, displayModelName, canonicalModelId } from "./public/model-brand.js";
+import { modelBrand, displayModelName, canonicalModelId, modelTraits } from "./public/model-brand.js";
 
 const allowedSecrets = new Set(["FREE_API_KEY", "FREE_API_KEY_2", "FREE_API_KEY_3", "FREE_API_KEY_4"]);
 const credentials = new Map();
@@ -81,7 +81,7 @@ export function modelConfig(checks = [], observations = []) {
     const verified = verifiedImageRoutes(m.id, checks), check = checks.filter(c => verified.length ? verified.includes(c.routeKey) : modelRoutes(m.id).some(r => routeKey(r) === c.routeKey)).sort((a, b) => b.checkedAt.localeCompare(a.checkedAt))[0];
     const observation = observations.find(o => o.modelId === m.id);
     const speedNote = observation ? `最近请求约${(observation.elapsedMs / 1000).toFixed(1)}秒（含工具，仅供参考）` : check?.elapsedMs ? `最近图片检测约${(check.elapsedMs / 1000).toFixed(1)}秒，仅供参考` : '速度暂无实测数据';
-    return { ...m, imageSupport: { status: verified.length ? 'verified' : 'unverified', checkedAt: check?.checkedAt || null }, description: `文字问答、信息梳理 · ${verified.length ? '图片理解已验证' : '图片能力待验证'}`, speedNote };
+    return { ...m, imageSupport: { status: verified.length ? 'verified' : 'unverified', checkedAt: check?.checkedAt || null }, description: modelTraits(m.id), speedNote };
   });
   return { configured: publicModels.some(m => m.available), models, defaultModel: primaryKey ? legacyModels[0].id : publicModels.find(m => m.available)?.id || legacyModels[0].id, provider: "多通道模型服务", channels, knowledgeBase: false, capabilities: { search: { enabled: true, strength: "medium", mode: "application-tool", maxResults: 5 }, images: true, memory: true, reportDrafts: true } };
 }

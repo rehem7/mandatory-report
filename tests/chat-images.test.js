@@ -41,7 +41,7 @@ test('图片真实传输、能力检测及失败不误判，重试停止和账�
     assert.equal((await call(prefix + '/messages', { model, content: '', images })).status, 400, '未验证模型不得收到用户图片'); assert.equal(requests.length, 0);
     let check = await call('/api/ai/image-check', { model }); assert.equal(check.data.verified, true);
     const publicJson = JSON.stringify(check.data); assert.doesNotMatch(publicJson, /local-image-test|routeKey|"key"/);
-    assert.match(check.data.config.models[0].description, /图片理解已验证/); assert.match(check.data.config.models[0].speedNote, /实测|检测/);
+    assert.match(check.data.config.models[0].description, /轻快响应/); assert.doesNotMatch(check.data.config.models[0].description, /图片|图像|验证/); assert.equal(check.data.config.models[0].imageSupport.status, 'verified');
     const response = await call(prefix + '/messages', { model, content: '描述图片', images }); assert.equal(response.status, 200);
     const last = requests.at(-1).messages.findLast(m => m.role === 'user'); assert.equal(last.content[1].type, 'image_url'); assert.match(last.content[1].image_url.url, /^data:image\/png;base64,/);
     const another = '[故人情]gemini-2.5-pro'; await call('/api/ai/image-check', { model: another });

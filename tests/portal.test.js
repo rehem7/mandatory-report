@@ -60,15 +60,16 @@ test("真实协议代理、失败重试、实训评分、记录归属、单位�
     assert.equal((await call(target + "/finish", { learnerId: "teacher-1", worksheet })).status, 409);
     assert.equal((await call("/api/reports")).data.length, 0, "模拟上报不得进入公安队列");
     assert.equal((await call("/api/learning", { learnerId: "teacher-1", materialId: "missing" })).status, 400);
-    assert.equal((await call("/api/learning", { materialId: "teacher-duty" })).status, 409, "未完成有效阅读不能直接完成");
-    const progress = await call("/api/learning/teacher-duty/progress", { action: "start", active: true, atEnd: false });
-    assert.equal(progress.data.ready, false);
-    assert.equal((await call("/api/learning/teacher-duty/quiz", { answers: [0, 1] })).status, 409);
-    const ledger = (await call(unitPath)).data; assert.equal(ledger.totals.completed, 1); assert.equal(ledger.totals.passed, 1); assert.equal(ledger.totals.learning, 0);
+    assert.equal((await call("/api/learning/teacher-duty/quiz", { answers: [0, 1] })).status, 400, "必须完成全部题目");
+    const practice = await call("/api/learning/teacher-duty/quiz", { answers: [0, 1, 1] });
+    assert.equal(practice.status, 200, "无需阅读计时即可直接练习");
+    assert.equal(practice.data.lastQuiz.score, 100); assert.equal(practice.data.lastQuiz.items.length, 3);
+    const ledger = (await call(unitPath)).data; assert.equal(ledger.totals.completed, 1); assert.equal(ledger.totals.passed, 1); assert.equal(ledger.totals.learning, 1); assert.equal(ledger.totals.mastered, 1);
     const csv = await (await fetch(base + unitPath + "/export.csv")).text(); assert.ok(csv.includes("风险识别")); assert.ok(csv.includes("100")); assert.ok(csv.includes("知识掌握")); assert.ok(!csv.includes("愿意告诉我发生了什么")); assert.ok(!csv.includes(worksheet.report.description));
-    const persisted = JSON.parse(fs.readFileSync(path.join(testData, "database.json"), "utf8")); assert.equal(persisted.sessions.length, 2); assert.equal(persisted.sessions[1].score.total, 100); assert.equal(persisted.learning.length, 0);
+    const persisted = JSON.parse(fs.readFileSync(path.join(testData, "database.json"), "utf8")); assert.equal(persisted.sessions.length, 2); assert.equal(persisted.sessions[1].score.total, 100); assert.equal(persisted.learning.length, 1);
     assert.equal((await stranger(base + target, { method: "DELETE" })).status, 404);
     await call(target + "?learnerId=teacher-1", null, "DELETE");
+    await call("/api/learning/" + practice.data.id, null, "DELETE");
     const cleared = (await call(unitPath)).data; assert.equal(cleared.rows.length, 0); assert.equal(cleared.totals.completed, 0);
   } finally {
     await new Promise(resolve => server.close(resolve)); await new Promise(resolve => upstream.close(resolve));

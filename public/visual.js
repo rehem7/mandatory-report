@@ -4,10 +4,14 @@ const motion = matchMedia('(prefers-reduced-motion: reduce)');
 const observed = new WeakSet();
 let installed = false, frame = 0, lastCard = null;
 export const art = (name, className = '', eager = false) => {
-  // Select greeting, encouragement and protection poses from the project's 3x3 artwork.
-  if (['mascot-wave', 'mascot-encourage', 'mascot-protect'].includes(name)) return `<span class="theme-art mascot-art mascot-sprite ${name} ${className}" aria-hidden="true"><img src="/assets/mascot/guardian-expressions.jpg" width="1254" height="1254" alt="" decoding="async" loading="${eager ? 'eager' : 'lazy'}"></span>`;
-  const mascots = { 'mascot-question': ['/assets/mascot/guardian-question.png', 1078, 1459], 'mascot-confident': ['/assets/mascot/guardian-confident.png', 1254, 1254] };
-  if (mascots[name]) { const [src, width, height] = mascots[name]; return `<img class="theme-art mascot-art ${className}" src="${src}" width="${width}" height="${height}" alt="" aria-hidden="true" decoding="async" loading="${eager ? 'eager' : 'lazy'}">`; }
+  // Load only the displayed pose, rather than decoding the entire 3x3 sheet.
+  const poses = { 'mascot-wave': '/assets/mascot/guardian-wave.webp', 'mascot-encourage': '/assets/mascot/guardian-encourage.webp', 'mascot-protect': '/assets/mascot/guardian-protect.webp' };
+  if (poses[name]) return `<span class="theme-art mascot-art mascot-sprite ${name} ${className}" aria-hidden="true"><img src="${poses[name]}" width="418" height="418" alt="" decoding="async" loading="${eager ? 'eager' : 'lazy'}"></span>`;
+  const mascots = {
+    'mascot-question': ['/assets/mascot/guardian-question-240.webp', '/assets/mascot/guardian-question-480.webp', 480, 650, '(max-width: 767px) 112px, (max-width: 1199px) 150px, 190px'],
+    'mascot-confident': ['/assets/mascot/guardian-confident-240.webp', '/assets/mascot/guardian-confident-480.webp', 480, 480, '(max-width: 767px) 124px, (max-width: 1199px) 170px, 210px']
+  };
+  if (mascots[name]) { const [small, large, width, height, sizes] = mascots[name]; return `<img class="theme-art mascot-art ${className}" src="${small}" srcset="${small} 240w, ${large} 480w" sizes="${sizes}" width="${width}" height="${height}" alt="" aria-hidden="true" decoding="async" loading="${eager ? 'eager' : 'lazy'}">`; }
   const files = { support: '/assets/visual/children-support.svg', learning: '/assets/visual/children-learning.svg', reading: '/assets/visual/children-reading.svg' };
   return `<img class="theme-art ${className}" src="${files[name] || files.reading}" width="500" height="500" alt="" aria-hidden="true" decoding="async" loading="${eager ? 'eager' : 'lazy'}">`;
 };
@@ -29,10 +33,12 @@ export function installVisuals(root) {
   }, { threshold: .06 });
   const enhance = node => {
     if (!(node instanceof Element)) return;
+    const surfaces = '.scenario-card,.lesson-card,.lesson-practice,.chat-card,.chat-sessions,.portal-record,.ledger-panel,.stat,.panel,.child-support-card';
+    for (const surface of [...(node.matches(surfaces) ? [node] : []), ...node.querySelectorAll(surfaces)]) surface.setAttribute('data-spotlight', '');
     for (const el of [...(node.matches('[data-reveal]') ? [node] : []), ...node.querySelectorAll('[data-reveal]')]) if (!observed.has(el)) { observed.add(el); observer.observe(el); }
   };
   enhance(root);
-  new MutationObserver(records => { for (const record of records) for (const node of record.addedNodes) enhance(node); }).observe(root, { childList: true });
+  new MutationObserver(records => { for (const record of records) for (const node of record.addedNodes) enhance(node); }).observe(root, { childList: true, subtree: true });
   root.addEventListener('pointermove', event => {
     if (motion.matches || event.pointerType !== 'mouse') return;
     const card = event.target.closest('[data-spotlight]');

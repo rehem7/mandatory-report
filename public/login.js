@@ -1,11 +1,17 @@
 import { post } from "/common.js";
-import { mountStrokeText } from "/stroke-text.js";
-import { mountBounceCards } from "/bounce-cards.js";
-import { mountSpecularButton } from "/specular-button.js";
 const $ = id => document.getElementById(id);
-mountStrokeText($("login-title"));
-mountBounceCards($("login-bounce-cards"));
-document.querySelectorAll(".auth-submit.specular-button").forEach(mountSpecularButton);
+// Keep the form usable immediately; decorate after the initial page has painted.
+const enhance = () => {
+  Promise.allSettled([
+    import("/stroke-text.js").then(({ mountStrokeText }) => mountStrokeText($("login-title"))),
+    import("/bounce-cards.js").then(({ mountBounceCards }) => mountBounceCards($("login-bounce-cards"))),
+    import("/specular-button.js").then(({ mountSpecularButton }) => document.querySelectorAll(".auth-submit.specular-button").forEach(mountSpecularButton))
+  ]);
+};
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  if ("requestIdleCallback" in window) window.requestIdleCallback(enhance, { timeout: 1000 });
+  else setTimeout(enhance, 0);
+}));
 let pending = false;
 function selectTab(register) {
   if (pending) return;

@@ -6,7 +6,7 @@ import { chatTools, webSearch } from "./chat-tools.js";
 import { identityContext, publicActor } from "./auth.js";
 import { createActivity } from "./activity.js";
 import { extractReportReview, confirmReportReview } from "./report-extraction.js";
-import { lessonMetadata, lessonState, readingPulse, completeReading, assessLesson } from "./learning.js";
+import { lessonMetadata, lessonState, completeReading, assessLesson } from "./learning.js";
 import { normalizeChatImages, imageBytes } from './chat-images.js';
 import { verifiedImageRoutes } from './model-registry.js';
 import { probeModelImages } from './image-probe.js';
@@ -274,11 +274,11 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
     }
   }
   if (p === "/api/learning/state" && req.method === "GET") return send(200, materials.map(m => lessonState(db, req.actor.ownerId, m)));
-  const readingMatch = p.match(/^\/api\/learning\/([^/]+)\/(progress|quiz)$/);
+  const readingMatch = p.match(/^\/api\/learning\/([^/]+)\/quiz$/);
   if (readingMatch && req.method === "POST") {
     const material = materials.find(m => m.id === readingMatch[1]); if (!material) fail("学习材料不存在");
     const b = await body(req);
-    const result = readingMatch[2] === "progress" ? readingPulse(db, req.actor, material, b) : assessLesson(db, req.actor, material, b.answers);
+    const result = assessLesson(db, req.actor, material, b.answers);
     save(); return send(200, result);
   }
   if (p === "/api/learning" && req.method === "GET") return send(200, db.learning.filter(own));
@@ -300,7 +300,7 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
     const people = [profile()];
     const training = db.sessions.filter(s => own(s) && s.kind === "training").map(summary);
     const learning = db.learning.filter(own);
-    const rows = [...training.map(s => ({ kind: "实训", learnerId: s.learnerId, title: s.title, state: s.state === "completed" ? "已完成" : "进行中", score: s.score, time: s.completedAt || s.createdAt })), ...learning.map(r => ({ kind: "学习", learnerId: r.learnerId, title: r.title, state: r.masteredAt ? "阅读完成 · 测验已掌握" : "阅读完成 · 待检验", score: null, quizScore: r.bestScore, mastered: !!r.masteredAt, time: r.completedAt }))].sort((a, b) => b.time.localeCompare(a.time));
+    const rows = [...training.map(s => ({ kind: "实训", learnerId: s.learnerId, title: s.title, state: s.state === "completed" ? "已完成" : "进行中", score: s.score, time: s.completedAt || s.createdAt })), ...learning.map(r => ({ kind: "学习", learnerId: r.learnerId, title: r.title, state: r.masteredAt ? "练习完成 · 已掌握" : r.lastQuiz ? "练习完成 · 待巩固" : "已阅读 · 待练习", score: null, quizScore: r.bestScore, mastered: !!r.masteredAt, time: r.completedAt }))].sort((a, b) => b.time.localeCompare(a.time));
     if (unitMatch[2]) {
       const header = ["记录类型", "单位", "学员", "岗位", "案例/课程", "完成状态", "总分", "达标", "风险识别", "问询沟通", "报告判断", "证据梳理", "模拟上报", "时间", "学习测验最高分", "知识掌握"];
       const data = rows.map(r => { const who = profile(r.learnerId); return [r.kind, unit.name, who.name, who.role, r.title, r.state, r.score?.total ?? "", r.score ? (r.score.passed ? "是" : "否") : "", ...Array.from({ length: 5 }, (_, i) => r.score?.items[i]?.score ?? ""), r.time, r.quizScore ?? "", r.kind === "学习" ? r.mastered ? "已掌握" : "待检验" : ""]; });

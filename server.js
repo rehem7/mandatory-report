@@ -10,6 +10,7 @@ import { staticFiles } from "./static-files.js";
 import { gzipSync } from "node:zlib";
 import { MAX_BODY_BYTES, attachmentsOf, attachmentMetadata, normalizeAttachments } from "./attachments.js";
 import { resolveRegion } from "./public/regions.js";
+import { handleShareLink } from "./share-links.js";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const serveStatic = staticFiles(root);
 const dir = process.env.DATA_DIR || path.join(root, "data");
@@ -57,6 +58,7 @@ async function body(req) { let chunks = []; let size = 0; for await (const c of 
 export const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
+    if (handleShareLink(req, res, url, dir)) return;
     const role = decodeURIComponent(req.headers["x-demo-role"] || "%E5%85%AC%E5%AE%89");
     if (url.pathname.startsWith("/api/")) {
       if (!["GET", "HEAD"].includes(req.method) && req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return reply(res, 403, { error: "请求来源无效" });

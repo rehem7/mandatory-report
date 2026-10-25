@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { issueShareLink } from '../share-links.js';
+const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const tunnels = await fetch('http://127.0.0.1:4040/api/tunnels').then(r => r.json());
+const base = tunnels.tunnels.find(t => t.proto === 'https' && t.config.addr === 'http://127.0.0.1:3000')?.public_url;
+if (!base) throw Error('请先开启指向本项目的 HTTPS 内网穿透');
+const health = await fetch('http://127.0.0.1:3000/login');
+if (!health.ok) throw Error('本地项目未正常运行');
+await health.arrayBuffer();
+const link = issueShareLink(process.env.DATA_DIR || path.join(root, 'data'));
+const data = { url: new URL(link.pathname, base).href, expiresAt: new Date(link.expiresAt).toISOString(), expiresAtShanghai: new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', dateStyle: 'short', timeStyle: 'medium', hour12: false }).format(link.expiresAt) };
+fs.mkdirSync(path.join(root, 'outputs'), { recursive: true });
+fs.writeFileSync(path.join(root, 'outputs', 'project-qr-24h.json'), JSON.stringify(data, null, 2));
+console.log(JSON.stringify(data));

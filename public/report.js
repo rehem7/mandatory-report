@@ -9,7 +9,7 @@ import { regionPicker } from "/region-picker.js";
 const $ = id => document.getElementById(id);
 const form = $("report-form");
 const locationPicker = regionPicker(form);
-installVisuals(document.querySelector(".report-container"));
+installVisuals(document.body);
 document.getElementById("report-support-art").innerHTML = art('mascot-protect', '', true);
 document.querySelector(".emergency-call .emergency-icon").innerHTML = icon("phone");
 const identities = ["未成年本人", "家长/监护人", "教师/教育工作者", "医护人员", "社区工作人员", "其他"];

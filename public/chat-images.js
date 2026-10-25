@@ -1,5 +1,5 @@
 import { esc } from '/common.js';
-export const chatImageTools = () => '<div class="chat-image-toolbar"><button type="button" id="add-chat-image" class="secondary mini">添加图片</button><button type="button" id="check-image-model" class="text-button mini">检测图片支持</button><span id="chat-image-state" role="status"></span><input type="file" id="chat-image-input" accept="image/png,image/jpeg,image/webp" multiple hidden></div><ul id="chat-image-list" class="chat-image-list" aria-label="待发送图片"></ul><p class="chat-image-note">图片仅用于 AI 辅助理解，不自动附入报告。请先遮挡可识别个人信息。</p>';
+export const chatImageTools = () => '<div class="chat-image-toolbar"><button type="button" id="add-chat-image" class="secondary mini">添加图片</button><input type="file" id="chat-image-input" accept="image/png,image/jpeg,image/webp" multiple hidden></div><ul id="chat-image-list" class="chat-image-list" aria-label="待发送图片"></ul>';
 export async function filesToChatImages(files, previous = []) {
   if (files.length + previous.length > 3) throw Error('每条消息最多3张图片');
   const type = file => file.type || ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' })[file.name.split('.').pop().toLowerCase()];

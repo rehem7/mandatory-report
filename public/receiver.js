@@ -1,5 +1,7 @@
 import { esc, time, api, post, toast, icon, openDialog, bindDialog } from "/common.js";
 import { reportTags } from "/report-tags.js";
+import { installVisuals } from "/visual.js";
+installVisuals(document.body);
 
 function riskTags(r) { const tags = reportTags(r.types); return tags.length ? `<div class="risk-situation-tags" aria-label="报告情形标签">${tags.map(t => `<span class="badge situation-tag">${esc(t)}</span>`).join("")}</div>` : ""; }
 
