@@ -303,10 +303,19 @@ async function openReportDraft(value) {
   await flushDrafts(learnerId());
   location.href = "/report?draft=" + encodeURIComponent(value.id);
 }
+const difficultyLabels = { 1: "入门", 2: "进阶", 3: "高阶" };
+const starPath = "M12 3.4l2.72 5.51 6.08.88-4.4 4.29 1.04 6.06L12 17.28l-5.44 2.86 1.04-6.06-4.4-4.29 6.08-.88z";
+const levelOf = c => c.level || { "入门": 1, "进阶": 2, "高阶": 3 }[c.difficulty] || 1;
+function difficultyBadge(c) {
+  const level = levelOf(c);
+  const label = difficultyLabels[level];
+  return `<span class="difficulty-badge" data-level="${level}" aria-label="难度：${label}，${level}星"><span class="stars" aria-hidden="true">${[1, 2, 3].map(i => `<svg viewBox="0 0 24 24" class="${i <= level ? "on" : "off"}"><path d="${starPath}"/></svg>`).join("")}</span><span aria-hidden="true">${label}</span></span>`;
+}
 function trainingListing() {
   clearStream(); current = null;
   const caseIcon = role => /教师|学校/.test(role) ? 'teacher' : /医护|医生/.test(role) ? 'medical' : /社区|工作/.test(role) ? 'community' : 'hands';
-  main.innerHTML = intro("情景实训", "通过练习案例提升沟通、判断和报告能力，完成后获得评分与纠错。", picker()) + disclaimer + banner("training") + `<div class="case-grid-public">${data.cases.map((c, i) => `<section class="scenario-card" data-reveal data-spotlight><div class="scenario-top"><span class="scenario-symbol">${icon(caseIcon(c.role))}</span><span class="scenario-number">情景 ${String(i + 1).padStart(2, "0")}</span><span class="badge subtle">练习案例</span></div><h2>${esc(c.title)}</h2><p>${esc(c.summary)}</p><div class="case-tags"><span>${esc(c.role)}</span><span>·</span><span>${esc(c.character)}</span><span>· ${c.difficulty}</span></div><button type="button" class="primary" data-start="${c.id}">开始实训 →</button></section>`).join("")}</div>` + footer(); bindModel();
+  const card = (c, i) => `<section class="scenario-card" data-level="${levelOf(c)}" data-reveal data-spotlight><div class="scenario-top"><span class="scenario-symbol">${icon(caseIcon(c.role))}</span><span class="scenario-number">情景 ${String(i + 1).padStart(2, "0")}</span><span class="scenario-flags"><span class="badge subtle">练习案例</span>${difficultyBadge(c)}</span></div><h2>${esc(c.title)}</h2><p>${esc(c.summary)}</p><div class="case-tags"><span>${esc(c.role)}</span><span>·</span><span>${esc(c.character)}</span></div><button type="button" class="primary" data-start="${c.id}">开始实训 →</button></section>`;
+  main.innerHTML = intro("情景实训", "通过练习案例提升沟通、判断和报告能力，案例按难度由浅入深排列；完成后获得评分与纠错。", picker()) + disclaimer + banner("training") + `<div class="case-grid-public">${data.cases.map(card).join("")}</div>` + footer(); bindModel();
 }
 const checks = (options, name) => options.map((o, i) => `<label class="checkline"><input type="checkbox" name="${name}" value="${i}">${esc(o)}</label>`).join("");
 function worksheetHTML(c) {
@@ -337,7 +346,7 @@ function renderTraining() {
   if (current.state === "completed") {
     main.innerHTML = intro(c.title + " · 实训复盘", "成绩和完整对话已保存，可在个人记录及单位台账查看。", picker() + `<button type="button" data-back-training class="secondary mini">返回案例</button>`) + disclaimer + scoreHTML(current) + feedbackHTML(current) + `<details class="panel"><summary>查看完整实训对话</summary><div class="chat-messages">${messagesHTML(current)}</div></details>` + footer(); bindModel(); setModel(current.model, false); return;
   }
-  main.innerHTML = intro(c.title, "练习案例 · " + c.role + " · " + c.character, picker() + `<button type="button" data-back-training class="secondary mini">返回案例</button>`) + disclaimer + `<div class="training-layout">${chatCard(true)}${worksheetHTML(c)}</div>` + footer(); bindModel(); setModel(current.model, false); bindComposer(); restoreWorksheet(current.worksheet); updateChat();
+  main.innerHTML = intro(c.title, "练习案例 · " + c.role + " · " + c.character + " · 难度 " + (difficultyLabels[c.level] || c.difficulty), picker() + `<button type="button" data-back-training class="secondary mini">返回案例</button>`) + disclaimer + `<div class="training-layout">${chatCard(true)}${worksheetHTML(c)}</div>` + footer(); bindModel(); setModel(current.model, false); bindComposer(); restoreWorksheet(current.worksheet); updateChat();
   $("worksheet-form").onsubmit = async e => {
     e.preventDefault(); if (generating) return toast("请等待AI回复完成");
     const worksheet = getWorksheet(); current.worksheet = worksheet;
