@@ -43,6 +43,9 @@
 .children-banner .banner-art.mascot-art{width:210px;height:210px;justify-self:center;transform:none}
 .mascot-sprite{position:relative;overflow:hidden;aspect-ratio:1}
 .mascot-sprite>img{position:absolute;display:block;width:300%;height:300%;max-width:none;left:-200%;top:-200%;pointer-events:none;user-select:none}
+.mascot-encourage>img{top:0}.mascot-protect>img{left:0}
+.child-support-card .mascot-sprite{width:170px;height:170px;max-width:100%;margin:0 auto 12px}
 .public-page .illustrated-empty>.mascot-sprite{height:auto;aspect-ratio:1}
 @media(max-width:1199px){.public-page .welcome-art.mascot-art{width:150px;height:190px}.children-banner .banner-art.mascot-art{width:170px;height:180px}}
 @media(max-width:767px){.public-page .welcome-art.mascot-art{width:112px;height:145px}.children-banner .banner-art.mascot-art{width:124px;height:144px}}
+.children-banner .banner-art.mascot-sprite{height:auto;aspect-ratio:1}

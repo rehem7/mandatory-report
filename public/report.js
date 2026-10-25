@@ -7,7 +7,7 @@ import { art, emptyArtwork, installVisuals } from "/visual.js";
 const $ = id => document.getElementById(id);
 const form = $("report-form");
 installVisuals(document.querySelector(".report-container"));
-document.getElementById("report-support-art").innerHTML = art('support', '', true);
+document.getElementById("report-support-art").innerHTML = art('mascot-protect', '', true);
 const identities = ["未成年本人", "家长/监护人", "教师/教育工作者", "医护人员", "社区工作人员", "其他"];
 const types = ["身体虐待", "性侵害", "情感/精神虐待", "忽视/疏于照料", "家庭暴力", "暴力伤害", "拐卖", "遗弃", "组织乞讨", "自杀/自残", "其他"];
 const owner = learnerId();
