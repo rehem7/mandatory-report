@@ -9,7 +9,7 @@ import { readEvents } from "../public/event-stream.js";
 import { canonicalModelId, displayModelName, modelTraits } from "../public/model-brand.js";
 
 test("分密钥发现模型、去重与厂商图标、正确路由和流式回退边界", async () => {
-  const calls = []; let partialFailure = false, queued = true;
+  const calls = []; let partialFailure = false, queued = true, upstreamFailure = "";
   const tokens = ["model-test-primary", "model-test-two", "model-test-three", "model-test-four"];
   const primary = http.createServer(async (req, res) => {
     if (req.url === "/v1/models") {
@@ -22,6 +22,10 @@ test("分密钥发现模型、去重与厂商图标、正确路由和流式回�
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
     const body = JSON.parse(Buffer.concat(chunks).toString());
     calls.push({ channel: "primary", authorization: req.headers.authorization, model: body.model, stream: body.stream, path: req.url });
+    if (upstreamFailure) {
+      res.writeHead(upstreamFailure === "quota" ? 403 : upstreamFailure === "channel" ? 503 : 401, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ error: { code: upstreamFailure === "quota" ? "insufficient_user_quota" : "upstream_failure", message: upstreamFailure === "channel" ? "无可用模型通道 private-upstream-marker" : "private-upstream-marker" } }));
+    }
     if (req.headers.authorization === "Bearer " + tokens[2]) {
       res.writeHead(200, { "Content-Type": "text/event-stream" }); return res.end('data: ' + JSON.stringify({ choices: [{ delta: { content: "路由正确" } }] }) + '\n\ndata: [DONE]\n\n');
     }
@@ -55,6 +59,7 @@ test("分密钥发现模型、去重与厂商图标、正确路由和流式回�
   process.env.AI_SECONDARY_BASE_URL = "http://127.0.0.1:" + secondary.address().port + "/v1";
   process.env.AI_KEY_3_BASE_URL = process.env.AI_BASE_URL;
   [process.env.FREE_API_KEY, process.env.FREE_API_KEY_2, process.env.FREE_API_KEY_3, process.env.FREE_API_KEY_4] = tokens;
+  process.env.DEEPSEEK_API_KEY = "";
   const { server } = await import("../server.js");
   const { complete, aiConfig } = await import("../ai.js");
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -113,6 +118,11 @@ test("分密钥发现模型、去重与厂商图标、正确路由和流式回�
     await assert.rejects(complete(session.model, [{ role: "user", content: "中断测试" }], () => {}), /中断/);
     assert.equal(calls.length, before + 1, "已经输出片段后不得切通道拼接重复答案");
     await assert.rejects(complete("not-registered", []), /请选择/);
+    for (const [failure, expected] of [["quota", /余额或额度不足/], ["channel", /暂无可用模型通道/], ["auth", /鉴权失败/]]) {
+      upstreamFailure = failure;
+      await assert.rejects(complete("[故人情]gemini-3.8-flash", []), error => expected.test(error.message) && !error.message.includes("private-upstream-marker"));
+    }
+    upstreamFailure = "";
     assert.match((await fetch(base + "/assets/OpenAI.svg")).headers.get("content-type"), /image\/svg\+xml/);
     assert.match((await (await fetch(base + "/assets/OpenAI.svg")).text()), /<title>OpenAI<\/title>/);
   } finally {

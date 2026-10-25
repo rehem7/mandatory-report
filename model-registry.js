@@ -9,7 +9,7 @@ function credential(name) {
   if (!allowedSecrets.has(name)) throw Error("无效的模型通道配置");
   if (credentials.has(name)) return credentials.get(name);
   let value = process.env[name]?.trim();
-  if (!value && process.platform === "win32") {
+  if (!Object.hasOwn(process.env, name) && process.platform === "win32") {
     try {
       value = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `$v=[Environment]::GetEnvironmentVariable('${name}','User'); if(!$v){$v=[Environment]::GetEnvironmentVariable('${name}','Machine')}; $v`], { encoding: "utf8", windowsHide: true, timeout: 5000 }).trim();
     } catch { /* Only availability, never a credential value, is exposed. */ }
@@ -39,11 +39,20 @@ const excludedModels = new Set([
 const domesticBrands = new Set(["deepseek", "glm", "kimi", "minimax", "longcat"]);
 const chatCapable = id => !/(?:embedding|rerank|whisper|tts|dall-e|image|imagen|veo|sora|stable-diffusion|flux)/i.test(id);
 if (deepseekKey) {
+  let flashUpstreamId = "deepseek-flash-1017";
+  if (process.env.AI_CATALOG_ENABLED !== "0") {
+    try {
+      const response = await fetch(deepseek + "/models", { headers: { Authorization: `Bearer ${deepseekKey}` }, redirect: "error", signal: AbortSignal.timeout(15000) });
+      const catalog = response.ok ? await response.json() : null;
+      const ids = new Set((catalog?.data || []).map(model => model.id));
+      if (!ids.has(flashUpstreamId) && ids.has("deepseek-flash")) flashUpstreamId = "deepseek-flash";
+    } catch { /* Retain the requested dated ID when discovery is unavailable. */ }
+  }
   for (const definition of [
-    { upstreamId: "deepseek-flash-1017", name: "DeepSeek V4.1 Flash" },
+    { upstreamId: flashUpstreamId, publicId: "deepseek-flash-1017", name: "DeepSeek V4.1 Flash" },
     { upstreamId: "deepseek-v4-pro", name: "DeepSeek V4 Pro" }
   ]) {
-    const id = "deepseek:" + definition.upstreamId;
+    const id = "deepseek:" + (definition.publicId || definition.upstreamId);
     routes.set(id, [{ endpoint: deepseek, key: deepseekKey, upstreamId: definition.upstreamId }]);
     identities.set(canonicalModelId(definition.upstreamId), id);
     publicModels.push({ id, name: definition.name, ...modelBrand(definition.upstreamId), provider: "api.deepseek.com", available: true });
@@ -105,5 +114,5 @@ export function modelConfig(checks = [], observations = []) {
     const speedNote = observation ? `最近请求约${(observation.elapsedMs / 1000).toFixed(1)}秒（含工具，仅供参考）` : check?.elapsedMs ? `最近图片检测约${(check.elapsedMs / 1000).toFixed(1)}秒，仅供参考` : '速度暂无实测数据';
     return { ...m, imageSupport: { status: verified.length ? 'verified' : 'unverified', checkedAt: check?.checkedAt || null }, description: modelTraits(m.id), speedNote };
   });
-  return { configured: publicModels.some(m => m.available), models, defaultModel: primaryKey ? legacyModels[0].id : publicModels.find(m => m.available)?.id || legacyModels[0].id, provider: "多通道模型服务", channels, knowledgeBase: false, capabilities: { search: { enabled: true, strength: "medium", mode: "application-tool", maxResults: 5 }, images: true, memory: true, reportDrafts: true } };
+  return { configured: publicModels.some(m => m.available), models, defaultModel: deepseekKey ? "deepseek:deepseek-flash-1017" : primaryKey ? legacyModels[0].id : publicModels.find(m => m.available)?.id || legacyModels[0].id, provider: "多通道模型服务", channels, knowledgeBase: false, capabilities: { search: { enabled: true, strength: "medium", mode: "application-tool", maxResults: 5 }, images: true, memory: true, reportDrafts: true } };
 }

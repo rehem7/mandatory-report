@@ -105,7 +105,13 @@ async function invokeOnce({ endpoint, key, upstreamId }, messages, onDelta, sign
       body: JSON.stringify({ model: upstreamId, messages, temperature: 0.5, max_tokens: 2048, stream: !!onDelta, ...(tools ? { tools, tool_choice: "auto" } : {}) })
     });
     if (!response.ok) {
-      const error = Error(response.status === 429 ? "模型服务限流，请稍后重试或切换模型" : response.status === 401 || response.status === 403 ? "模型服务鉴权失败，请检查服务端密钥权限" : `模型服务返回 HTTP ${response.status}，请重试或切换模型`);
+      const body = await response.json().catch(() => null);
+      // Classify known failures without exposing upstream text or credentials.
+      const detail = [body?.error?.code, body?.error?.type, body?.error?.message, body?.code, body?.message]
+        .filter(value => typeof value === "string").map(value => value.slice(0, 2000)).join(" ");
+      const quota = response.status === 402 || /insufficient.*(?:quota|balance|credit)|(?:quota|balance|credit).*(?:insufficient|exhausted)|余额不足|额度不足/i.test(detail);
+      const noChannel = /no available.*(?:channel|model)|无可用.*(?:通道|模型)/i.test(detail);
+      const error = Error(quota ? "模型通道余额或额度不足，请补充额度或切换可用通道" : noChannel ? "上游暂无可用模型通道，请稍后重试或切换模型" : response.status === 429 ? "模型服务限流，请稍后重试或切换模型" : response.status === 401 || response.status === 403 ? "模型服务鉴权失败，请检查服务端密钥权限" : `模型服务返回 HTTP ${response.status}，请重试或切换模型`);
       const retryAfter = Number(response.headers.get("retry-after"));
       if (response.status === 429 && retryAfter > 0 && retryAfter <= 10) error.retryAfterMs = retryAfter * 1000;
       error.status = 502; error.toolingRejected = !!tools && [400, 422].includes(response.status); throw error;
