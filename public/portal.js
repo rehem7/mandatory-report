@@ -76,7 +76,6 @@ const modelImage = (id, size = 28, named = false) => { const identity = modelIde
 const text = renderMarkdown;
 const personUrl = path => path + (path.includes("?") ? "&" : "?") + "learnerId=" + encodeURIComponent(learnerId());
 const sessionGet = id => api(personUrl("/api/sessions/" + encodeURIComponent(id)));
-const disclaimer = `<div class="legal-notice">AI 仅供辅助参考，不构成法律意见；紧急危险请直接拨打 <strong>110</strong>。请保护未成年人隐私，仅提供必要信息。</div>`;
 function picker() {
   let selected = localStorage.getItem("chosenModel") || config.defaultModel;
   if (!config.models.some(m => m.id === selected)) selected = config.defaultModel;
@@ -181,7 +180,7 @@ async function streamSession(path, payload, kind = "message") {
 function messagesHTML(s) {
   return s.messages.map(m => `<div class="message ${m.role === "user" ? "user" : "assistant"}"><span class="message-avatar">${m.role === "user" ? "我" : modelImage(m.model || s.model, 28, true)}</span><div class="message-body">${m.role === "assistant" ? activityHTML(m.activity) : ""}<div class="message-text">${text(m.content)}${m.images?.length ? `<ul class="chat-message-images">${chatImagesHTML(m.images)}</ul>` : ""}</div>${m.sources?.length ? `<div class="message-sources"><span>联网参考 · 中等范围</span>${m.sources.map(source => `<a href="${esc(source.url)}" target="_blank" rel="noopener noreferrer">${esc(source.title)} ↗</a>`).join("")}<p>${esc(m.searchNote || "")}</p></div>` : ""}<div class="message-meta">${m.origin === "scenario" ? "练习情景 · 角色开场" : m.role === "user" ? "我的提问" : "AI · " + esc(modelName(m.model || s.model))} · ${time(m.time)}</div></div></div>`).join("") + (s.kind === "qa" && s.reportReview ? `<section class="chat-report-action"><div><strong>AI 已提取待核对信息</strong><p>${s.reportReview.candidates.length} 项候选信息，逐项对照原话并确认后才能填写表单。</p><small>转述与推测单独标注，未知留空，尚未提交。</small></div><button type="button" class="primary mini" data-open-report="${esc(s.id)}">核对信息并填写表单 ↗</button></section>` : s.kind === "qa" && s.reportDraft && !s.reportDraft.confirmation ? `<section class="chat-report-action"><div><strong>旧草稿需要重新核对</strong><p>请使用顶部“从对话整理报告”重新提取原话，再确认填写。</p></div></section>` : "");
 }
-function composer(training = false) { return `<form id="chat-form" class="chat-composer"><label for="chat-input" class="visually-hidden">输入对话内容</label><textarea id="chat-input" rows="1" maxlength="4000" placeholder="描述您的问题；请不要提供真实未成年人的个人信息…"></textarea>${training ? "" : chatImageTools()}<div class="composer-bottom"><button id="chat-send" class="primary" type="submit">发送 <span aria-hidden="true">↑</span></button></div></form>`; }
+function composer(training = false) { return `<form id="chat-form" class="chat-composer"><label for="chat-input" class="visually-hidden">输入对话内容</label><textarea id="chat-input" rows="1" maxlength="4000" placeholder="${training ? "试着回应情境中的角色，练习关心、倾听与询问…" : "描述您的问题；请不要提供真实未成年人的个人信息…"}"></textarea>${training ? "" : chatImageTools()}<div class="composer-bottom"><button id="chat-send" class="primary" type="submit">发送 <span aria-hidden="true">↑</span></button></div></form>`; }
 function chatCard(training = false) {
   return `<section class="chat-card"><div class="chat-heading"><div><h2 id="chat-title">${training ? esc(data.cases.find(c => c.id === current.caseId).character) : "强制报告助手"}</h2><p id="chat-subtitle">${training ? "与AI角色沟通，逐步了解情形" : "围绕报告判断、证据留存与保护措施提问"}</p></div>${training ? "" : `<div class="qa-report-actions" aria-label="报告操作"><button type="button" class="primary" data-build-report>从对话整理报告 ↗</button><a class="secondary" href="/report">填写表单 ↗</a></div>`}</div>${training ? `<div class="training-case-note">${esc(data.cases.find(c => c.id === current.caseId).summary)}</div>` : ""}<div id="chat-messages" class="chat-messages" aria-live="polite"></div><div id="chat-retry" class="chat-retry" hidden></div>${composer(training)}</section>`;
 }
@@ -282,7 +281,7 @@ async function refreshRecent() { const version = navigationVersion; const value 
 function renderRecent() { $("chat-session-list").innerHTML = recent.filter(s => s.kind === "qa").slice(0, 12).map(s => `<button class="session-link ${s.id === current?.id ? "active" : ""}" type="button" data-session="${s.id}"><span>${esc(s.title)}</span></button>`).join("") || `<p class="muted">还没有问答记录</p>`; }
 async function qaPage() {
   const version = navigationVersion;
-  main.innerHTML = intro("智能问答", "从一个问题开始，了解报告与保护的下一步。", `<button type="button" data-open-memory class="secondary mini">我的记忆</button>` + picker()) + disclaimer + `<div class="chat-layout"><aside class="chat-sessions"><h3>最近的对话</h3><button id="new-chat" type="button" class="secondary">＋ 新建问答</button><div id="chat-session-list" class="chat-session-list"></div></aside>${chatCard()}</div>`;
+  main.innerHTML = intro("智能问答", "从一个问题开始，了解报告与保护的下一步。", `<button type="button" data-open-memory class="secondary mini">我的记忆</button>` + picker()) + `<div class="chat-layout"><aside class="chat-sessions"><h3>最近的对话</h3><button id="new-chat" type="button" class="secondary">＋ 新建问答</button><div id="chat-session-list" class="chat-session-list"></div></aside>${chatCard()}</div>`;
   bindModel(); bindComposer(); updateChat();
   $("new-chat").onclick = () => { if (generating) return toast("请等待当前回复完成"); clearStream(); current = null; pendingChatImages = []; replacePortalURL("/ask"); $("chat-title").textContent = "强制报告助手"; $("chat-input").value = ""; updateChat(); renderRecent(); };
   await refreshRecent();
@@ -367,7 +366,7 @@ function trainingListing() {
   clearStream(); current = null;
   const caseIcon = role => /教师|学校/.test(role) ? 'teacher' : /医护|医生/.test(role) ? 'medical' : /社区|工作/.test(role) ? 'community' : 'hands';
   const card = (c, i) => `<section class="scenario-card" data-level="${levelOf(c)}" data-reveal data-spotlight><div class="scenario-top"><span class="scenario-symbol">${icon(caseIcon(c.role))}</span><span class="scenario-number">情景 ${String(i + 1).padStart(2, "0")}</span><span class="scenario-flags"><span class="badge subtle">练习案例</span>${difficultyBadge(c)}</span></div><h2>${esc(c.title)}</h2><p>${esc(c.summary)}</p><div class="case-tags"><span>${esc(c.role)}</span><span>·</span><span>${esc(c.character)}</span></div><button type="button" class="primary" data-start="${c.id}">开始实训 →</button></section>`;
-  main.innerHTML = intro("情景实训", "通过练习案例提升沟通、判断和报告能力，案例按难度由浅入深排列；完成后获得评分与纠错。", picker()) + disclaimer + banner("training") + `<div class="case-grid-public">${data.cases.map(card).join("")}</div>` + footer(); bindModel();
+  main.innerHTML = intro("情景实训", "通过练习案例提升沟通、判断和报告能力，案例按难度由浅入深排列；完成后获得评分与纠错。", picker()) + banner("training") + `<div class="case-grid-public">${data.cases.map(card).join("")}</div>` + footer(); bindModel();
 }
 const checks = (options, name) => options.map((o, i) => `<label class="checkline"><input type="checkbox" name="${name}" value="${i}">${esc(o)}</label>`).join("");
 function worksheetHTML(c) {
@@ -399,9 +398,9 @@ function feedbackHTML(s) {
 function renderTraining() {
   const c = data.cases.find(c => c.id === current.caseId);
   if (current.state === "completed") {
-    main.innerHTML = intro(c.title + " · 实训复盘", "成绩和完整对话已保存，可在个人记录及单位台账查看。", picker() + `<button type="button" data-back-training class="secondary mini">返回案例</button>`) + disclaimer + scoreHTML(current) + communicationReview(current) + feedbackHTML(current) + `<details class="panel"><summary>查看完整实训对话</summary><div class="chat-messages">${messagesHTML(current)}</div></details>` + footer(); bindModel(); setModel(current.model, false); return;
+    main.innerHTML = intro(c.title + " · 实训复盘", "成绩和完整对话已保存，可在个人记录及单位台账查看。", picker() + `<button type="button" data-back-training class="secondary mini">返回案例</button>`) + scoreHTML(current) + communicationReview(current) + feedbackHTML(current) + `<details class="panel"><summary>查看完整实训对话</summary><div class="chat-messages">${messagesHTML(current)}</div></details>` + footer(); bindModel(); setModel(current.model, false); return;
   }
-  main.innerHTML = intro(c.title, "练习案例 · " + c.role + " · " + c.character + " · 难度 " + (difficultyLabels[c.level] || c.difficulty), picker() + `<button type="button" data-back-training class="secondary mini">返回案例</button>`) + disclaimer + `<div class="training-layout">${chatCard(true)}${worksheetHTML(c)}</div>` + footer(); bindModel(); setModel(current.model, false); bindComposer(); restoreWorksheet(current.worksheet); updateChat();
+  main.innerHTML = intro(c.title, "练习案例 · " + c.role + " · " + c.character + " · 难度 " + (difficultyLabels[c.level] || c.difficulty), picker() + `<button type="button" data-back-training class="secondary mini">返回案例</button>`) + `<div class="training-layout">${chatCard(true)}${worksheetHTML(c)}</div>` + footer(); bindModel(); setModel(current.model, false); bindComposer(); restoreWorksheet(current.worksheet); updateChat();
   $("worksheet-form").onsubmit = async e => {
     e.preventDefault(); if (generating) return toast("请等待AI回复完成");
     const worksheet = getWorksheet(); current.worksheet = worksheet;
@@ -427,16 +426,28 @@ async function recordsPage() {
   const [values] = await Promise.all([api("/api/portal/records"), syncDrafts(learnerId())]);
   if (version !== navigationVersion) return;
   recent = values.sessions; learning = values.learning; data.receipts = values.receipts;
-  main.innerHTML = intro("我的记录", accountState.authenticated ? `${data.who.name}的对话、学习、报告与草稿，随账号保存。` : "当前浏览器的访客记录，与登录账号的记录分开保存。", `<button type="button" data-refresh-records class="secondary mini">刷新记录 ↻</button>`) + `<div id="record-filters" class="records-toolbar"></div><div id="record-list" class="portal-records"></div>` + footer(); renderRecords();
+  if (query.get("type") === "report") filter = "report";
+  main.innerHTML = intro("我的记录", accountState.authenticated ? `${data.who.name}的对话、学习、报告与草稿，随账号保存。` : "当前浏览器的访客记录，与登录账号的记录分开保存。", `<a href="/records?type=report" class="secondary mini">我的上报记录 · ${data.receipts.length} ↗</a><button type="button" data-refresh-records class="secondary mini">刷新记录 ↻</button>`) + `<div id="record-filters" class="records-toolbar"></div><div id="record-list" class="portal-records"></div>` + footer(); renderRecords();
+}
+function reportRecordHTML(r) {
+  const labels = ["已接收", "研判中", "已转办", "已办结"];
+  const events = r.timeline || [];
+  const cycle = events.slice(Math.max(0, events.findLastIndex(e => e.status === "待受理")));
+  const steps = labels.map((label, stage) => {
+    const event = cycle.find(e => e.stage === stage);
+    const current = r.stage === stage;
+    return `<li class="${event ? "reached" : ""} ${current ? "current" : ""}"${current ? ' aria-current="step"' : ""}><span class="report-step-dot" aria-hidden="true">${event ? "✓" : stage + 1}</span><strong>${label}</strong><small>${event ? time(event.time) : current ? "办理时间未记录" : r.stage > stage ? "未经过 / 未记录" : "待更新"}</small></li>`;
+  }).join("");
+  return `<article class="portal-record report-progress-record"><span class="portal-record-icon">${icon("file")}</span><div class="portal-record-info"><h3>${esc(r.title)}</h3><p>上报 · ${time(r.updatedAt)}</p></div><span class="badge subtle">${esc(labels[r.stage] || "已接收")} · ${esc(r.status)}</span><details class="report-progress"${filter === "report" ? " open" : ""}><summary>查看办理进度</summary><ol class="report-progress-track" aria-label="上报办理进度">${steps}</ol><p class="report-progress-note">以实际办理记录为准，部分线索无需转办即可办结。已有编号可持续查看，无需重复上报。</p><ol class="report-progress-events">${events.map(e => `<li><time datetime="${esc(e.time)}">${time(e.time)}</time><span>${esc(e.label)} · ${esc(e.status)}</span></li>`).join("")}</ol></details></article>`;
 }
 function renderRecords() {
   let drafts = []; try { drafts = listDrafts(learnerId()); } catch { toast("无法读取报告草稿，请检查浏览器存储设置"); }
   const all = [...recent.map(s => ({ ...s, type: s.kind })), ...learning.map(l => ({ ...l, type: "learning", updatedAt: l.completedAt })), ...data.receipts.map(r => ({ ...r, title: r.id, type: "report", updatedAt: r.receivedAt })), ...drafts.map(d => ({ ...d, title: d.fields.description?.trim().slice(0, 42) || d.fields.types?.join("、") || "未完成的线索", type: "draft" }))].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const labels = { all: "全部", draft: "草稿", qa: "问答", training: "实训", learning: "学习", report: "上报" };
+  const labels = { all: "全部", draft: "草稿", qa: "问答", training: "实训", learning: "学习", report: "我的上报记录" };
   $("record-filters").innerHTML = Object.entries(labels).map(([key, title]) => `<button type="button" class="${key === filter ? "active" : ""}" data-filter="${key}">${title} ${key === "all" ? all.length : all.filter(s => s.type === key).length}</button>`).join("");
   const shown = all.filter(r => filter === "all" || r.type === filter);
   const draftHTML = r => `<article class="portal-record"><span class="portal-record-icon">${icon("file")}</span><div class="portal-record-info"><h3>${esc(r.title)}</h3><p>报告草稿 · ${time(r.updatedAt)}${r.attachmentName ? " · 含附件" : ""}</p></div><span class="badge amber">未提交</span><div class="actions"><a class="draft-resume" href="/report?draft=${encodeURIComponent(r.id)}">继续填写 ↗</a><button type="button" class="text-button" data-delete-draft="${esc(r.id)}">删除草稿</button></div></article>`;
-  $("record-list").innerHTML = shown.map(r => r.type === "draft" ? draftHTML(r) : `<article class="portal-record"><span class="portal-record-icon">${icon(r.type === "qa" ? "spark" : r.type === "training" ? "review" : r.type === "learning" ? "book" : "file")}</span><div class="portal-record-info"><h3>${esc(r.title)}</h3><p>${labels[r.type]} · ${time(r.updatedAt)}${r.model ? " · " + esc(modelName(r.model)) : ""}</p></div><span class="badge ${r.score && !r.score.passed ? "amber" : "subtle"}">${r.type === "report" ? esc(r.status) : r.type === "learning" ? (r.masteredAt ? "已掌握" : r.lastQuiz ? "最高 " + r.bestScore + " 分 · 待巩固" : "待练习") : r.score ? r.score.total + "分 · " + (r.score.passed ? "达标" : "未达标") : r.type === "training" ? "进行中" : r.messageCount + "条消息"}</span><div class="actions">${r.type === "qa" || r.type === "training" ? `<button type="button" data-open-record="${r.id}">查看</button>${r.type === "training" || r.state !== "completed" ? `<a href="/${r.type === "qa" ? "ask" : "training"}?session=${r.id}">${r.state === "completed" ? "复盘" : "继续"} ↗</a>` : ""}<button type="button" class="text-button" data-delete-session="${r.id}">删除</button>` : r.type === "learning" ? `<a href="/learning?lesson=${encodeURIComponent(r.materialId)}">查看学习 / 练习 ↗</a><button type="button" class="text-button" data-delete-learning="${r.id}">删除记录</button>` : `<a href="/report">报告表单 ↗</a>`}</div></article>`).join("") || emptyArtwork("这里还没有记录", "开始一次问答、实训或学习后，记录会自动保存。");
+  $("record-list").innerHTML = shown.map(r => r.type === "report" ? reportRecordHTML(r) : r.type === "draft" ? draftHTML(r) : `<article class="portal-record"><span class="portal-record-icon">${icon(r.type === "qa" ? "spark" : r.type === "training" ? "review" : r.type === "learning" ? "book" : "file")}</span><div class="portal-record-info"><h3>${esc(r.title)}</h3><p>${labels[r.type]} · ${time(r.updatedAt)}${r.model ? " · " + esc(modelName(r.model)) : ""}</p></div><span class="badge ${r.score && !r.score.passed ? "amber" : "subtle"}">${r.type === "report" ? esc(r.status) : r.type === "learning" ? (r.masteredAt ? "已掌握" : r.lastQuiz ? "最高 " + r.bestScore + " 分 · 待巩固" : "待练习") : r.score ? r.score.total + "分 · " + (r.score.passed ? "达标" : "未达标") : r.type === "training" ? "进行中" : r.messageCount + "条消息"}</span><div class="actions">${r.type === "qa" || r.type === "training" ? `<button type="button" data-open-record="${r.id}">查看</button>${r.type === "training" || r.state !== "completed" ? `<a href="/${r.type === "qa" ? "ask" : "training"}?session=${r.id}">${r.state === "completed" ? "复盘" : "继续"} ↗</a>` : ""}<button type="button" class="text-button" data-delete-session="${r.id}">删除</button>` : r.type === "learning" ? `<a href="/learning?lesson=${encodeURIComponent(r.materialId)}">查看学习 / 练习 ↗</a><button type="button" class="text-button" data-delete-learning="${r.id}">删除记录</button>` : `<a href="/report">报告表单 ↗</a>`}</div></article>`).join("") || emptyArtwork("这里还没有记录", "开始一次问答、实训或学习后，记录会自动保存。");
 }
 function worksheetReview(s) {
   if (!s.worksheet) return "";
@@ -479,7 +490,7 @@ main.onclick = async e => {
       catch (error) { toast(error.message); try { current = await sessionGet(current.id); } catch {} }
       finally { generating = false; if (current.busy) resumeGeneration(current); else renderTraining(); }
     }
-    else if (button.dataset.filter) { filter = button.dataset.filter; renderRecords(); }
+    else if (button.dataset.filter) { filter = button.dataset.filter; replacePortalURL(filter === "report" ? "/records?type=report" : "/records"); query = new URLSearchParams(location.search); renderRecords(); }
     else if (button.hasAttribute("data-refresh-records")) { button.disabled = true; await recordsPage(); }
     else if (button.dataset.openRecord) await openRecord(button.dataset.openRecord);
     else if (button.dataset.deleteDraft) { pendingDelete = { kind: "draft", id: button.dataset.deleteDraft }; openDialog($("delete-dialog")); }

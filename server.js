@@ -12,6 +12,7 @@ import { MAX_BODY_BYTES, attachmentsOf, attachmentMetadata, normalizeAttachments
 import { resolveRegion } from "./public/regions.js";
 import { handleShareLink } from "./share-links.js";
 import { resetDemoData } from "./demo-data.js";
+import { reportProgress, recordReportProgress } from "./report-progress.js";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const serveStatic = staticFiles(root);
 const dir = process.env.DATA_DIR || path.join(root, "data");
@@ -68,7 +69,7 @@ export const server = http.createServer(async (req, res) => {
       if (await handleAuth(req, res, url, db, save, body, reply)) return;
       if (await handleDrafts(req, res, url, db, save, body, reply)) return;
       if (await handlePortal(req, res, url, db, save, body, reply)) return;
-      if (url.pathname === "/api/my-reports" && req.method === "GET") return reply(res, 200, db.reports.filter(r => r.ownerId === req.actor.ownerId).map(({ id, status, receivedAt }) => ({ id, status, receivedAt })));
+      if (url.pathname === "/api/my-reports" && req.method === "GET") return reply(res, 200, db.reports.filter(r => r.ownerId === req.actor.ownerId).map(r => reportProgress(r, db.logs)));
       if (!roles.includes(role)) return reply(res, 403, { error: "无效演示部门" });
       if (url.pathname === "/api/demo/reset" && req.method === "POST") {
         if (role !== "公安") return reply(res, 403, { error: "请从接收工作台重置案例数据" });
@@ -96,9 +97,11 @@ export const server = http.createServer(async (req, res) => {
         const r = { id, receipt, ...Object.fromEntries(required.map(k => [k, b[k].trim().slice(0, 10000)])), identityOther: b.identityOther || "", typeOther: b.typeOther || "", types: b.types, reporter: { name: b.reporter?.name || "", organization: b.reporter?.organization || "", phone: b.reporter?.phone || "" }, anonymous: !b.reporter?.name?.trim() && !b.reporter?.phone?.trim(), obligated: ["教师/教育工作者", "医护人员", "社区工作人员"].includes(b.identity), attachments, receivedAt: now.toISOString(), deadline: new Date(now.getTime() + 86400000).toISOString(), ai: assess(b), confirmedTag: null, status: "待受理", department: null, helpSummary: "", helpRecords: [], supervision: [] };
         if (location) r.regionCodes = location.codes;
         r.ownerId = req.actor.ownerId;
+        r.submittedAt = r.receivedAt;
+        r.progressHistory = [{ status: r.status, time: r.receivedAt }];
         db.reports.unshift(r); log("公众", "提交线索，接收工作台开始24小时计时", id); return reply(res, 201, { id, receipt, receivedAt: r.receivedAt, status: r.status });
       }
-      if (url.pathname === "/api/receipt" && req.method === "POST") { const b = await body(req); const r = db.reports.find(r => r.id === b.id && r.receipt === b.receipt); return r ? reply(res, 200, { id: r.id, status: r.status, receivedAt: r.receivedAt }) : reply(res, 404, { error: "记录不存在或查询凭证不正确" }); }
+      if (url.pathname === "/api/receipt" && req.method === "POST") { const b = await body(req); const r = db.reports.find(r => r.id === b.id && r.receipt === b.receipt); return r ? reply(res, 200, reportProgress(r, db.logs)) : reply(res, 404, { error: "记录不存在或查询凭证不正确" }); }
       if (url.pathname === "/api/reports" && req.method === "GET") { const reports = db.reports.filter(r => accessible(r, role)).map(r => view(r, role)); log(role, "查看线索列表", null); return reply(res, 200, reports); }
       if (url.pathname === "/api/logs" && req.method === "GET") return role === "公安" ? reply(res, 200, db.logs.slice(-200).reverse()) : reply(res, 403, { error: "仅公安可查看全量日志" });
       const match = url.pathname.match(new RegExp("^/api/reports/([^/]+)(?:/(attachment|attachments/([0-9]+)|action))?$"));
@@ -112,6 +115,8 @@ export const server = http.createServer(async (req, res) => {
           log(role, "查看附件：" + file.name, r.id); res.writeHead(200, { "Content-Type": file.mime, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": "attachment; filename*=UTF-8''" + encodeURIComponent(file.name) }); return res.end(Buffer.from(file.data, "base64"));
         }
         if (match[2] === "action" && req.method === "POST") {
+          const previousStatus = r.status;
+          const submittedAt = reportProgress(r, db.logs).receivedAt;
           const b = await body(req); const note = typeof b.note === "string" ? b.note.trim().slice(0, 10000) : "";
           if (role === "公安") {
             if (b.action === "review") { if (!["A", "B", "C"].includes(b.tag) || !note) return reply(res, 400, { error: "请选择标签并填写复核依据" }); r.confirmedTag = b.tag; }
@@ -128,6 +133,8 @@ export const server = http.createServer(async (req, res) => {
             else if (b.action === "upgrade") { r.helpRecords.push({ department: role, note: "升级回公安：" + note, time: new Date().toISOString() }); r.department = null; r.status = "待受理"; r.confirmedTag = null; r.receivedAt = new Date().toISOString(); r.deadline = new Date(Date.now() + 86400000).toISOString(); }
             else return reply(res, 403, { error: "无权执行该操作" });
           } else return reply(res, 403, { error: "检察端只接收监督摘要" });
+          r.submittedAt ||= submittedAt;
+          recordReportProgress(r, previousStatus, db.logs);
           log(role, b.action + (b.tag ? " 标签" + b.tag : "") + (b.status ? " " + b.status : "") + (note ? "：" + note : ""), r.id); supervise(); return reply(res, 200, view(r, role));
         }
         if (!match[2] && req.method === "GET") { log(role, "查看线索详情", r.id); return reply(res, 200, view(r, role)); }

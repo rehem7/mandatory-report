@@ -10,6 +10,7 @@ import { lessonMetadata, lessonState, completeReading, assessLesson } from "./le
 import { normalizeChatImages, imageBytes } from './chat-images.js';
 import { verifiedImageRoutes } from './model-registry.js';
 import { probeModelImages } from './image-probe.js';
+import { reportProgress } from './report-progress.js';
 const busy = new Set();
 const live = new Map();
 const operations = new Map(), cancelledRequests = new Map();
@@ -71,7 +72,7 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
   db.sessions ||= []; db.learning ||= [];
   const catalog = () => ({ profiles: [profile()], units: [{ id: profile().unitId, name: "我的培训台账" }], cases: publicCases(), materials: materials.map(m => ({ ...lessonMetadata(m), sources: m.sourceIndexes.map(i => sources[i]) })), sources });
   if (p === "/api/portal/bootstrap" && req.method === "GET") return send(200, { account: publicActor(req), catalog: catalog(), config: aiConfig(db.aiCapabilities, db.modelObservations) });
-  if (p === "/api/portal/records" && req.method === "GET") return send(200, { sessions: db.sessions.filter(own).map(summary).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), learning: db.learning.filter(own), receipts: db.reports.filter(own).map(({ id, status, receivedAt }) => ({ id, status, receivedAt })) });
+  if (p === "/api/portal/records" && req.method === "GET") return send(200, { sessions: db.sessions.filter(own).map(summary).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), learning: db.learning.filter(own), receipts: db.reports.filter(own).map(r => reportProgress(r, db.logs)) });
   if (p === "/api/portal/catalog" && req.method === "GET") return send(200, catalog());
   if (p === "/api/ai/config" && req.method === "GET") return send(200, aiConfig(db.aiCapabilities, db.modelObservations));
   if (p === '/api/ai/image-check' && req.method === 'POST') {
