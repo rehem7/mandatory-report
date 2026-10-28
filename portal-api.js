@@ -7,6 +7,7 @@ import { identityContext, publicActor } from "./auth.js";
 import { createActivity } from "./activity.js";
 import { extractReportReview, confirmReportReview } from "./report-extraction.js";
 import { lessonMetadata, lessonState, completeReading, assessLesson } from "./learning.js";
+import { gameCatalog, gameState, recordGameRun } from "./games.js";
 import { normalizeChatImages, imageBytes } from './chat-images.js';
 import { verifiedImageRoutes } from './model-registry.js';
 import { probeModelImages } from './image-probe.js';
@@ -63,16 +64,16 @@ function beginStream(res, s, kind, model, operation) {
 }
 export async function handlePortal(req, res, url, db, save, body, reply) {
   const p = url.pathname;
-  if (!["/api/portal/", "/api/ai/", "/api/sessions", "/api/learning", "/api/units", "/api/memory"].some(prefix => p.startsWith(prefix))) return false;
+  if (!["/api/portal/", "/api/ai/", "/api/sessions", "/api/learning", "/api/units", "/api/memory", "/api/games"].some(prefix => p.startsWith(prefix))) return false;
   const send = (status, value) => { reply(res, status, value); return true; };
   const profile = () => req.actor.profile, userId = req.actor.ownerId;
   const memoryOwner = () => req.actor.ownerId;
   const own = item => item.ownerId === req.actor.ownerId;
   const prepareReview = (session, model, signal) => extractReportReview(session, { complete, model, signal, actor: req.actor });
   db.sessions ||= []; db.learning ||= [];
-  const catalog = () => ({ profiles: [profile()], units: [{ id: profile().unitId, name: "我的培训台账" }], cases: publicCases(), materials: materials.map(m => ({ ...lessonMetadata(m), sources: m.sourceIndexes.map(i => sources[i]) })), sources });
+  const catalog = () => ({ profiles: [profile()], units: [{ id: profile().unitId, name: "我的培训台账" }], cases: publicCases(), materials: materials.map(m => ({ ...lessonMetadata(m), sources: m.sourceIndexes.map(i => sources[i]) })), sources, games: gameCatalog() });
   if (p === "/api/portal/bootstrap" && req.method === "GET") return send(200, { account: publicActor(req), catalog: catalog(), config: aiConfig(db.aiCapabilities, db.modelObservations) });
-  if (p === "/api/portal/records" && req.method === "GET") return send(200, { sessions: db.sessions.filter(own).map(summary).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), learning: db.learning.filter(own), receipts: db.reports.filter(own).map(r => reportProgress(r, db.logs)) });
+  if (p === "/api/portal/records" && req.method === "GET") return send(200, { sessions: db.sessions.filter(own).map(summary).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), learning: db.learning.filter(own), receipts: db.reports.filter(own).map(r => reportProgress(r, db.logs)), games: gameState(db, req.actor.ownerId) });
   if (p === "/api/portal/catalog" && req.method === "GET") return send(200, catalog());
   if (p === "/api/ai/config" && req.method === "GET") return send(200, aiConfig(db.aiCapabilities, db.modelObservations));
   if (p === '/api/ai/image-check' && req.method === 'POST') {
@@ -295,20 +296,31 @@ export async function handlePortal(req, res, url, db, save, body, reply) {
     if (index < 0) return send(404, { error: "学习记录不存在" });
     const [removed] = db.learning.splice(index, 1); db.learningProgress = (db.learningProgress || []).filter(p => !(p.ownerId === req.actor.ownerId && p.materialId === removed.materialId)); save(); return send(200, { deleted: true });
   }
+  if (p === "/api/games/state" && req.method === "GET") return send(200, gameState(db, req.actor.ownerId));
+  const gameRunMatch = p.match(/^\/api\/games\/([^/]+)\/run$/);
+  if (gameRunMatch && req.method === "POST") {
+    const b = await body(req);
+    const result = recordGameRun(db, req.actor, { ...b, gameId: gameRunMatch[1] });
+    save(); return send(200, result);
+  }
   const unitMatch = p.match(/^\/api\/units\/([^/]+)(?:\/(export\.csv))?$/);
   if (unitMatch && req.method === "GET") {
     const unit = { id: profile().unitId, name: "我的培训台账" }; if (decodeURIComponent(unitMatch[1]) !== unit.id) fail("无权查看该台账", 404);
     const people = [profile()];
     const training = db.sessions.filter(s => own(s) && s.kind === "training").map(summary);
     const learning = db.learning.filter(own);
-    const rows = [...training.map(s => ({ kind: "实训", learnerId: s.learnerId, title: s.title, state: s.state === "completed" ? "已完成" : "进行中", score: s.score, time: s.completedAt || s.createdAt })), ...learning.map(r => ({ kind: "学习", learnerId: r.learnerId, title: r.title, state: r.masteredAt ? "练习完成 · 已掌握" : r.lastQuiz ? "练习完成 · 待巩固" : "已阅读 · 待练习", score: null, quizScore: r.bestScore, mastered: !!r.masteredAt, time: r.completedAt }))].sort((a, b) => b.time.localeCompare(a.time));
+    const gameRuns = (db.gameRuns || []).filter(own);
+    // 台账只记"通关"，重复游玩不会刷行；未通关的记录只用于学习页的薄弱知识点。
+    const clearedGames = new Map();
+    for (const run of gameRuns) if (run.cleared) clearedGames.set(run.gameId + ":" + run.levelId, run);
+    const rows = [...training.map(s => ({ kind: "实训", learnerId: s.learnerId, title: s.title, state: s.state === "completed" ? "已完成" : "进行中", score: s.score, time: s.completedAt || s.createdAt })), ...learning.map(r => ({ kind: "学习", learnerId: r.learnerId, title: r.title, state: r.gameClearedAt ? "练习完成 · 检验通关" : r.masteredAt ? "练习完成 · 已掌握" : r.lastQuiz ? "练习完成 · 待巩固" : "已阅读 · 待练习", score: null, quizScore: r.bestScore, mastered: !!r.masteredAt, time: r.completedAt })), ...[...clearedGames.values()].map(run => ({ kind: "知识检验", learnerId: run.learnerId, title: run.title, state: "已通关", score: null, seconds: Math.round(run.durationMs / 1000), mistakes: run.misplaced.length, time: run.createdAt }))].sort((a, b) => b.time.localeCompare(a.time));
     if (unitMatch[2]) {
-      const header = ["记录类型", "单位", "学员", "岗位", "案例/课程", "完成状态", "总分", "达标", "风险识别", "问询沟通", "报告判断", "证据梳理", "模拟上报", "时间", "学习测验最高分", "知识掌握"];
-      const data = rows.map(r => { const who = profile(r.learnerId); return [r.kind, unit.name, who.name, who.role, r.title, r.state, r.score?.total ?? "", r.score ? (r.score.passed ? "是" : "否") : "", ...Array.from({ length: 5 }, (_, i) => r.score?.items[i]?.score ?? ""), r.time, r.quizScore ?? "", r.kind === "学习" ? r.mastered ? "已掌握" : "待检验" : ""]; });
+      const header = ["记录类型", "单位", "学员", "岗位", "案例/课程", "完成状态", "总分", "达标", "风险识别", "问询沟通", "报告判断", "证据梳理", "模拟上报", "时间", "学习测验最高分", "知识掌握", "知识检验用时(秒)", "检验薄弱知识点"];
+      const data = rows.map(r => { const who = profile(r.learnerId); return [r.kind, unit.name, who.name, who.role, r.title, r.state, r.score?.total ?? "", r.score ? (r.score.passed ? "是" : "否") : "", ...Array.from({ length: 5 }, (_, i) => r.score?.items[i]?.score ?? ""), r.time, r.quizScore ?? "", r.kind === "学习" ? r.mastered ? "已掌握" : "待检验" : "", r.seconds ?? "", r.kind === "知识检验" ? r.mistakes : ""]; });
       res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename*=UTF-8''" + encodeURIComponent(unit.name + "培训台账.csv"), "Cache-Control": "no-store" });
       res.end("\uFEFF" + [header, ...data].map(row => row.map(csvCell).join(",")).join("\r\n")); return true;
     }
-    return send(200, { unit, people, rows, totals: { learners: people.length, completed: training.filter(s => s.state === "completed").length, passed: training.filter(s => s.score?.passed).length, learning: learning.length, mastered: learning.filter(r => r.masteredAt).length } });
+    return send(200, { unit, people, rows, totals: { learners: people.length, completed: training.filter(s => s.state === "completed").length, passed: training.filter(s => s.score?.passed).length, learning: learning.length, mastered: learning.filter(r => r.masteredAt).length, games: clearedGames.size } });
   }
   return send(404, { error: "接口不存在" });
 }

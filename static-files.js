@@ -8,7 +8,7 @@ const routes = new Map(Object.entries({
 }));
 for (const name of ['login.css', 'login.js', 'account.js', 'style.css', 'portal.css', 'portal.js', 'shell.js', 'report.js', 'receiver.js', 'common.js', 'model-brand.js', 'event-stream.js', 'report-drafts.js', 'report-tags.js', 'icons.js', 'visual.js', 'visual.css', 'activity-view.js', 'stroke-text.js', 'login-title-paths.js', 'bounce-cards.js', 'specular-button.js', 'specular-light.js']) routes.set('/' + name, name);
 for (const name of ['Gemini.svg', 'OpenAI.svg', 'Claude.svg', 'deepseek.svg', 'GROK.svg', 'GLM.svg', 'kimi.svg', 'minimax-color.svg', 'longcat-bright.svg', 'AI.svg', 'login-child-before.png', 'login-child-after.png']) routes.set('/assets/' + name, 'assets/' + name);
-for (const name of ['children-support.svg', 'children-learning.svg', 'children-reading.svg', 'children-care.svg', 'children-play.svg', 'guardian-mark.svg', 'illustration-sources.json', 'icon-sources.json', 'adult-avatar-1.png', 'adult-avatar-2.png', 'adult-avatar-3.png', 'adult-avatar-4.png', 'adult-avatar-5.png', 'avatar-sources.json', 'licenses/lucide.txt', 'licenses/react-bits.txt']) routes.set('/assets/visual/' + name, 'assets/visual/' + name);
+for (const name of ['children-support.svg', 'children-learning.svg', 'children-reading.svg', 'children-care.svg', 'children-play.svg', 'guardian-mark.svg', 'illustration-sources.json', 'icon-sources.json', 'adult-avatar-1.png', 'adult-avatar-2.png', 'adult-avatar-3.png', 'adult-avatar-4.png', 'adult-avatar-5.png', 'avatar-sources.json', 'rule-magnifier.webp', 'licenses/lucide.txt', 'licenses/react-bits.txt']) routes.set('/assets/visual/' + name, 'assets/visual/' + name);
 for (const name of ['guardian-question.png', 'guardian-confident.png', 'guardian-expressions.jpg']) routes.set('/assets/mascot/' + name, 'assets/mascot/' + name);
 for (const pose of ['before', 'after']) for (const width of [240, 480, 800]) {
   const name = `assets/login-child-${pose}-${width}.webp`;
@@ -25,13 +25,24 @@ for (const pose of ['wave', 'encourage', 'protect']) {
 routes.set('/assets/visual/fayu-qinghe-logo.png', 'assets/visual/fayu-qinghe-logo.png');
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.txt': 'text/plain; charset=utf-8', '.json': 'application/json; charset=utf-8' };
 for (const name of ['markdown.js', 'vendor/markdown-it.js', 'assets/visual/licenses/markdown-it.txt', 'assets/visual/licenses/markdown-it-cjk-friendly.txt', 'assets/visual/licenses/east-asian-width.txt']) routes.set('/' + name, name);
-for (const name of ['accessibility.css', 'learning.js', 'chat-images.js', 'report-review.js', 'attachment-policy.js', 'region-data.js', 'regions.js', 'region-picker.js', 'help-tour.js', 'assets/visual/licenses/lcn.txt']) routes.set('/' + name, name);
+for (const name of ['accessibility.css', 'learning.js', 'games.js', 'games.css', 'chat-images.js', 'report-review.js', 'attachment-policy.js', 'region-data.js', 'regions.js', 'region-picker.js', 'help-tour.js', 'assets/visual/licenses/lcn.txt']) routes.set('/' + name, name);
 routes.set('/receiver-filters.js', 'receiver-filters.js');
 const digest = value => crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
 
 export function staticFiles(root) {
+  // 普法小游戏的美术资源：scenes/ 与 cast/ 目录里有什么就注册什么，
+  // 加新图只要丢进目录再重启，不用改这张白名单。
+  for (const folder of ['assets/visual/scenes', 'assets/visual/cast', 'assets/visual/cast/stand']) {
+    let names = [];
+    try { names = fs.readdirSync(path.join(root, 'public', folder)); } catch { continue; }
+    for (const name of names) if (/\.(?:png|jpe?g|webp)$/i.test(name)) routes.set('/' + folder + '/' + name, folder + '/' + name);
+  }
   const files = new Map();
-  for (const name of new Set(routes.values())) files.set(name, fs.readFileSync(path.join(root, 'public', name)));
+  // 白名单里列了但文件还没到位时跳过，不要让整个服务起不来（美术资源是陆续交付的）
+  for (const name of new Set(routes.values())) {
+    const file = path.join(root, 'public', name);
+    if (fs.existsSync(file)) files.set(name, fs.readFileSync(file));
+  }
   const revision = digest(Buffer.concat([...files.values()]));
   // Keep artwork cached across code releases; modules still share a release revision.
   const revisions = new Map([...files].map(([name, buffer]) => [name, /\.(?:svg|png|jpe?g|webp)$/.test(name) ? digest(buffer) : revision]));

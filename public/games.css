@@ -1,0 +1,250 @@
+/* 普法小游戏：入口卡片、归类投放闯关、找茬大侦探。 */
+.game-dialog{width:min(1020px,calc(100vw - 28px));max-height:92dvh;padding:0;border:0;border-radius:26px;background:var(--surface);box-shadow:0 30px 80px #16330033;overflow:hidden}
+.game-dialog::backdrop{background:#16330059;backdrop-filter:blur(3px)}
+.game-dialog[open]{display:flex;flex-direction:column}
+.game-shell{display:flex;flex-direction:column;gap:14px;padding:20px 24px 18px;overflow-y:auto;min-height:0}
+.game-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.game-head-title{min-width:0}
+.game-eyebrow{display:block;font-size:10px;letter-spacing:1.4px;color:var(--muted);margin-bottom:5px}
+.game-head h2{font-size:19px;margin:0;line-height:1.35;overflow-wrap:anywhere}
+.game-hud{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.game-timer{font-variant-numeric:tabular-nums;font-size:15px;font-weight:700;color:var(--ink);background:var(--soft);border:1px solid var(--border);border-radius:999px;padding:5px 13px}
+.game-found{font-size:11px;color:var(--muted);white-space:nowrap}
+.game-dialog .icon-button{background:var(--soft);border-radius:50%;width:32px;height:32px;flex-shrink:0}
+
+/* 关卡进度 */
+.game-progress-track{display:flex;gap:7px}
+.game-progress-track span{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--soft);font-size:11px;font-weight:700;color:var(--muted)}
+.game-progress-track .is-now{background:var(--ink);color:#fff;border-color:var(--ink)}
+.game-progress-track .is-done{background:var(--lime-pale);color:#2f5c1c;border-color:#b7dd9c}
+.game-scene{font-size:12px;line-height:1.75;color:var(--body);background:var(--soft);border-left:3px solid var(--lime);border-radius:0 12px 12px 0;padding:10px 14px;margin:0}
+
+/* 卡片区 + 投放栏框 */
+.game-board{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:start}
+.game-deck{min-width:0}
+.deck-head{display:flex;align-items:baseline;gap:10px;margin-bottom:9px}
+.deck-head h3{font-size:12px;margin:0;flex-shrink:0}
+.deck-legend{font-size:10px;line-height:1.45;color:var(--muted);min-width:0}
+.deck-count{font-size:10px;color:var(--muted);margin-left:auto;flex-shrink:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+.deck-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.game-card{display:block;text-align:left;padding:11px 12px;border-radius:14px;border:1px solid var(--border);background:#fff;font-weight:500;line-height:1.55;transition:transform .14s,box-shadow .14s,border-color .14s;min-height:0;cursor:grab;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.game-card:hover{border-color:#a9c992;box-shadow:0 4px 14px #1633000f;transform:translateY(-1px)}
+.game-card.is-picked{border-color:#4d7f2b;background:#f4fae9;box-shadow:0 0 0 2px #4d7f2b33}
+.game-card.is-lifted{transform:scale(.97);border-color:#8fbf6a;box-shadow:0 6px 18px #16330026}
+.game-card.is-dragging{opacity:.28}
+/* 跟随指针的拖拽投影：fixed 定位在 dialog 内，随 transform 移动 */
+.game-card-ghost{position:fixed;z-index:9;pointer-events:none;opacity:.97;transition:none;border-color:#7cb356;background:#fff;max-height:46dvh;overflow:hidden;box-shadow:0 18px 38px #1633003d}
+.game-card-ghost.is-snapping{opacity:.82;border-color:#4d7f2b;box-shadow:0 10px 22px #1633002b}
+.game-dialog.is-dragging-now{user-select:none;cursor:grabbing}
+.card-kind{display:inline-block;font-size:9px;letter-spacing:.5px;line-height:1.7;padding:0 6px;border-radius:6px;background:#eef3e9;color:#456434;margin-bottom:6px}
+.game-card[data-tone="law"]{background:#f4f8fb;border-color:#d3e0ea}
+.game-card[data-tone="law"] .card-kind{background:#dce8f1;color:#33566d}
+.card-text{display:block;font-size:12px;color:var(--text);overflow-wrap:anywhere}
+.deck-empty{grid-column:1/-1;font-size:11px;color:var(--muted);margin:6px 0}
+
+.game-bin{position:relative;border:2px dashed #b4cfa0;border-radius:20px;background:#f7fbf2;padding:14px 15px;min-height:190px;display:flex;flex-direction:column;gap:10px;transition:border-color .16s,background .16s,box-shadow .16s}
+.game-bin[data-tone="error"]{border-color:#d99b9e;background:var(--red-pale)}
+.game-bin[data-tone="ok"]{border-color:#8fca68;background:#f1fae7}
+.game-bin[data-tone="picked"]{border-color:#7cb356;background:#f2fae6}
+.game-bin.is-over{border-color:#4d7f2b;background:#eaf7dc;box-shadow:inset 0 0 0 3px #a8d48866}
+.bin-drop{position:absolute;right:0;top:0;font-size:10.5px;font-weight:700;color:#3f6b22;opacity:0;transition:opacity .15s;pointer-events:none}
+.game-bin.is-over .bin-drop{opacity:1}
+.game-bin.is-over .bin-count{opacity:0}
+.bin-top{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.bin-label{font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+.bin-count{font-size:12px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;transition:opacity .15s}
+.bin-prompt{font-size:11px;color:var(--body);margin:0}
+.bin-placed{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.chip{font-size:11.5px;line-height:1.5;padding:7px 11px;border-radius:10px;background:#fff;border:1px solid #cfe3bd;color:#26421a;animation:chip-in .24s ease both;overflow-wrap:anywhere}
+.chip[data-tone="law"]{background:#f4f8fb;border-color:#cfdfeb;color:#2f4a5e}
+.chip-empty{font-size:11px;color:var(--muted);padding:10px 0;text-align:center}
+
+.game-hint{font-size:11.5px;line-height:1.7;color:var(--muted);margin:0;min-height:20px}
+.game-hint[data-tone="error"]{color:var(--red);font-weight:600}
+.game-hint[data-tone="ok"]{color:#3d6a24;font-weight:600}
+.game-hint[data-tone="picked"]{color:#3f6b22;font-weight:600}
+.game-foot{display:flex;align-items:center;gap:12px}
+.game-foot-actions{justify-content:flex-end}
+.game-foot .text-button{font-size:11px;color:var(--muted)}
+.is-shake{animation:bin-shake .32s ease}
+@keyframes chip-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes bin-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+/* 闯关总结 */
+.game-summary{display:flex;flex-direction:column;gap:16px}
+.summary-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.summary-stats>div{background:var(--soft);border:1px solid var(--border);border-radius:16px;padding:12px 14px}
+.summary-stats span{display:block;font-size:10px;color:var(--muted);margin-bottom:4px}
+.summary-stats strong{font-size:19px;color:var(--ink);font-variant-numeric:tabular-nums}
+.summary-block h3{font-size:12px;margin:0 0 8px}
+.summary-wrong{border:1px solid var(--border);border-radius:14px;padding:11px 13px;margin-bottom:8px}
+.summary-wrong>strong{display:block;font-size:11px;color:var(--muted);margin-bottom:6px}
+.summary-wrong p{margin:0 0 7px;font-size:12px;line-height:1.6}
+.summary-wrong p:last-child{margin-bottom:0}
+.summary-wrong small{display:block;font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.6}
+.summary-laws{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.summary-laws li{font-size:11.5px;line-height:1.75;color:var(--body);padding-left:13px;position:relative}
+.summary-laws li:before{content:"";position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;background:var(--lime);border:1px solid #8bbf6b}
+
+/* 找茬大侦探 */
+.game-rules-wrap{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:26px;align-items:start;padding:6px 0 14px}
+.rules-art{width:100%;max-width:210px;border-radius:18px;display:block;box-shadow:0 8px 24px #16330014;justify-self:end}
+.game-rules ol{margin:0 0 12px;padding-left:20px;font-size:12px;line-height:1.9;color:var(--body)}
+.game-rules .muted{font-size:11px}
+.detective-stage{position:relative;isolation:isolate;overflow:hidden;background:linear-gradient(170deg,#eef4e6,#f8faf4 62%,#eaf1e2);border:1px solid #dbe6d1;border-radius:20px;padding:16px 18px 18px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;min-height:432px}
+/* 场景底图：素材到位才有，缺图时自动移除，退回上面的渐变底 */
+.stage-bg{position:absolute;inset:0;z-index:0;width:100%;height:100%;object-fit:cover;object-position:center 58%;pointer-events:none;filter:saturate(1.06) contrast(1.06)}
+.stage-veil{position:absolute;inset:0;z-index:0;pointer-events:none;background:linear-gradient(180deg,#f8fbf2a3 0%,#f6faf17d 26%,#f4f9ef5c 58%,#eef6e69c 82%,#ebf3e2c4 100%)}
+.detective-stage>*:not(.stage-bg):not(.stage-veil){position:relative;z-index:1}
+.stage-brief-card{background:#ffffffdf;border:1px solid #ffffffee;border-radius:14px;padding:11px 14px;max-width:600px;box-shadow:0 4px 16px #16330012}
+.stage-brief{font-size:12.5px;line-height:1.75;color:var(--body);margin:0}
+.stage-time{font-size:10px;color:var(--muted);margin:4px 0 0;letter-spacing:.6px}
+.cast{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cast-member{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:16px;border:1px solid #d8e3cd;background:#ffffffe6;backdrop-filter:blur(3px);font-weight:500;transition:transform .16s,box-shadow .16s,border-color .16s;animation:cast-breathe 3.4s ease-in-out infinite}
+.cast-member:nth-child(2){animation-delay:.5s}
+.cast-member:nth-child(3){animation-delay:1s}
+.cast-member:hover{border-color:#9ec77f;box-shadow:0 6px 18px #16330014;transform:translateY(-2px)}
+.cast-member.is-active{border-color:var(--ink);box-shadow:0 0 0 2px #1633001f}
+.cast-member.is-found{border-color:#8fca68;background:#f4fbe9}
+.cast-name{font-size:12px;font-weight:700;color:var(--ink)}
+.cast-role{font-size:10px;color:var(--muted)}
+.cast-bubble{position:relative;background:#fffffff5;border:1px solid #d8e3cd;border-radius:16px;padding:12px 14px;box-shadow:0 6px 18px #1633000f;animation:chip-in .2s ease both}
+.cast-bubble:before{content:"";position:absolute;top:-7px;left:calc(50% - 6px);width:12px;height:12px;background:#fff;border-left:1px solid #d8e3cd;border-top:1px solid #d8e3cd;transform:rotate(45deg)}
+.bubble-from{display:block;font-size:10px;color:var(--muted);margin-bottom:4px}
+.cast-bubble p{margin:0;font-size:13px;line-height:1.7;color:var(--text)}
+.cast-bubble small{display:block;margin-top:7px;font-size:10.5px;color:#3d6a24}
+.cast-bubble.is-found{border-color:#a9d488;background:#f7fcef}
+.cast-bubble.is-found:before{background:#f7fcef;border-color:#a9d488}
+.summary-stats.is-two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.cast-hint{font-size:11.5px;color:var(--muted);margin:0;text-align:center;padding:6px 0}
+.detective-foot{justify-content:space-between}
+.report-button{display:inline-flex;flex-direction:column;align-items:center;gap:1px;border:0;border-radius:999px;padding:10px 26px;background:#e4572e;color:#fff;box-shadow:0 10px 26px #e4572e4d;transition:transform .14s,box-shadow .14s}
+.report-button:hover{transform:translateY(-1px);box-shadow:0 14px 30px #e4572e59}
+.report-button:active{transform:scale(.97)}
+.report-button span{font-size:14px;font-weight:800;letter-spacing:.4px}
+.report-button small{font-size:9px;opacity:.86}
+.fail-card{border:1px solid #eccfc9;background:var(--red-pale);border-radius:16px;padding:14px 16px}
+.fail-card strong{display:block;font-size:11px;color:var(--red);letter-spacing:1px;margin-bottom:6px}
+.fail-card p{margin:0;font-size:12.5px;line-height:1.75;color:var(--text)}
+.fail-knowledge{font-size:12px;line-height:1.75;color:var(--body);margin:0 0 8px}
+
+/* 学习页入口 */
+.game-entries{margin:26px 0 0;padding:20px 22px;border:1px solid #cfe3bf;border-radius:22px;background:linear-gradient(160deg,#f6fbf0,#eef6e6)}
+.game-entries-head h3{font-size:16px;margin:0 0 5px}
+.game-entries-head p{font-size:11.5px;color:var(--muted);margin:0 0 14px}
+.game-entry-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.game-entry{background:#fff;border:1px solid var(--border);border-radius:18px;padding:15px 16px;display:flex;flex-direction:column;gap:8px}
+.game-entry[data-tone="amber"]{border-color:#ecdfbe;background:#fffdf6}
+.game-entry-head{display:flex;align-items:center;gap:10px}
+.game-entry-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--lime-pale);color:#2f5c1c;flex-shrink:0}
+.game-entry[data-tone="amber"] .game-entry-icon{background:var(--amber-pale);color:var(--amber)}
+.game-entry-icon svg{width:19px;height:19px}
+.game-entry-head>div{flex:1;min-width:0}
+.game-entry-head h3{font-size:13.5px;margin:0}
+.game-entry-head p{font-size:10px;color:var(--muted);margin:2px 0 0}
+.game-entry-level{font-size:10.5px;color:var(--muted);margin:0}
+.game-entry-desc{font-size:11.5px;line-height:1.7;color:var(--body);margin:0;flex:1}
+.game-entry button{align-self:flex-start;font-size:12px;padding:8px 16px;min-height:36px;margin-top:2px}
+.lesson-point.is-weak{color:var(--red);font-weight:600;position:relative;padding-left:0}
+.lesson-point.is-weak:after{content:"待巩固";font-size:9px;font-weight:700;color:#fff;background:var(--red);border-radius:999px;padding:1px 7px;margin-left:8px;vertical-align:2px}
+
+@media(max-width:860px){
+  /* 手机上一屏放不下卡片区和栏框，把栏框置顶吸附，点卡片时它始终可见。 */
+  .game-board{display:flex;flex-direction:column;gap:11px}
+  .game-bin{order:-1;position:sticky;top:-1px;z-index:3;min-height:0;max-height:34dvh;overflow-y:auto;padding:11px 13px;box-shadow:0 8px 18px #16330014}
+  .game-entry-grid{grid-template-columns:1fr}
+  .game-dialog{width:calc(100vw - 16px);max-height:94dvh;border-radius:20px}
+  .game-shell{padding:16px 15px 14px}
+  .detective-stage{min-height:320px}
+  .summary-stats{grid-template-columns:1fr 1fr}
+  .summary-stats:not(.is-two)>div:last-child{grid-column:1/-1}
+  /* 手机竖屏：配图缩到左侧，文字列优先 */
+  .game-rules-wrap{grid-template-columns:minmax(0,1fr) 150px;gap:18px;padding-bottom:10px}
+}
+@media(max-width:520px){
+  .deck-grid{grid-template-columns:1fr}
+  .game-head h2{font-size:16px}
+  .cast{gap:7px}
+  .detective-stage{min-height:0;padding:13px 12px 14px}
+  .cast-name{font-size:11px}
+  .cast-role{font-size:9px}
+  .game-rules-wrap{grid-template-columns:1fr}
+  .rules-art{order:-1;max-width:150px;margin:0 auto 10px;justify-self:center}
+  .report-button{padding:9px 18px}
+  .report-button span{font-size:13px}
+  .game-entries{padding:16px}
+}
+@media(prefers-reduced-motion:reduce){
+  .cast-member,.chip,.cast-bubble{animation:none}
+  .game-card,.cast-member,.report-button{transition:none}
+  .is-shake{animation:none}
+}
+
+/* ---------------- 立绘模式：人物站在场景里 ----------------
+   立绘七分身底部会被画面切断，所以底部叠一层「地面」渐变把断口收掉。
+   高度跟着视口走，保证「舞台 + 台词 + 底部按钮」一屏放得下，台词不会被挤到可视区外。 */
+.detective-stage.is-stand{height:clamp(288px,calc(100dvh - 342px),520px);min-height:0;padding:16px 18px 0;justify-content:flex-start}
+.detective-stage.is-stand>.cast{
+  position:absolute;left:0;right:0;bottom:0;height:79%;
+  display:flex;align-items:flex-end;justify-content:center;gap:5%;
+  padding:0 6%;pointer-events:none;
+}
+.detective-stage.is-stand>.cast:before{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:15%;z-index:2;
+  background:linear-gradient(180deg,#eaf1e200 0%,#e8f0dea8 46%,#e3edd6e8 100%);
+  pointer-events:none;
+}
+.detective-stage.is-stand .cast-member{
+  /* --cast-h：角色身高系数（男高女矮、老人略矮），在 game-content.js 的 stance 字段里给；
+     底边对齐地面线，系数只影响头顶高度，不影响站位。不写就按 1 处理。 */
+  position:relative;height:calc(100% * var(--cast-h,1));padding:0;border:0;background:none;
+  box-shadow:none;backdrop-filter:none;animation:none;gap:0;
+  display:flex;align-items:flex-end;justify-content:center;
+  transition:none;pointer-events:auto;
+}
+.detective-stage.is-stand .cast-member:hover{transform:none;box-shadow:none;border-color:transparent}
+.detective-stage.is-stand .cast-figure{
+  display:block;height:100%;width:auto;flex:0 0 auto;
+  filter:drop-shadow(0 10px 16px #16330024);
+  transition:transform .18s ease,filter .18s ease;
+}
+.detective-stage.is-stand .cast-name{
+  position:absolute;left:50%;bottom:9px;transform:translateX(-50%);
+  background:#163300d9;color:#fff;font-size:11px;font-weight:600;line-height:1.3;
+  padding:3px 11px;border-radius:20px;white-space:nowrap;
+  box-shadow:0 3px 10px #16330033;z-index:3;
+}
+.detective-stage.is-stand .cast-role{display:none}
+.detective-stage.is-stand .cast-member:hover .cast-figure{transform:translateY(-5px)}
+.detective-stage.is-stand .cast-member.is-active .cast-figure{transform:translateY(-8px);filter:drop-shadow(0 18px 28px #1633003d)}
+/* 选中反馈：名签加深 + 描边，其余角色轻微压暗，让人一眼看出「现在在看谁」 */
+.detective-stage.is-stand .cast-member.is-active .cast-name{background:#163300;box-shadow:0 0 0 2px #a8d488,0 6px 16px #16330066;transform:translateX(-50%) scale(1.06)}
+.detective-stage.is-stand.has-active .cast-member:not(.is-active):not(.is-found) .cast-figure{filter:drop-shadow(0 10px 16px #16330024) brightness(.95) saturate(.94)}
+.detective-stage.is-stand .cast-member.is-found .cast-figure{filter:drop-shadow(0 0 12px #8fca6899) drop-shadow(0 12px 18px #16330024)}
+.detective-stage.is-stand .cast-member.is-found .cast-name{background:#4d7f2bf2}
+.detective-stage.is-stand .cast-member.is-found .cast-name:after{content:" ✓"}
+.detective-stage.is-stand .stage-brief-card{max-width:460px;padding:9px 13px}
+.detective-stage.is-stand .stage-time{margin-top:2px}
+
+/* 台词槽：紧贴舞台下方，保证点角色后一定有字可读（立绘模式下台词不再放进舞台里） */
+.talk-track{display:flex;flex-direction:column;gap:6px;min-height:0}
+.talk-track .cast-bubble,
+.talk-track .cast-hint{margin:0}
+/* 小箭头按选中角色的实测水平位置指上去（--talk-x 由 games.js 写入） */
+.talk-track .cast-bubble:before{display:block;left:calc(var(--talk-x,50%) - 6px)}
+.talk-track .game-hint{margin:0;padding-left:2px}
+.talk-track .cast-hint{text-align:left;padding:6px 2px}
+
+@media(max-width:860px){
+  /* 手机：人物是绝对定位，不会撑高舞台，必须给个定高，否则整块塌成一条 */
+  .detective-stage.is-stand{min-height:0;height:clamp(238px,calc(94dvh - 302px),328px);padding:11px 11px 0}
+  .detective-stage.is-stand>.cast{height:70%;gap:1.5%;padding:0 0}
+  .detective-stage.is-stand .stage-brief-card{max-width:100%;padding:8px 10px;border-radius:12px}
+  .detective-stage.is-stand .stage-brief{font-size:11px;line-height:1.65}
+  .detective-stage.is-stand .stage-time{font-size:9px}
+  .detective-stage.is-stand .cast-name{font-size:10px;padding:2px 8px;bottom:6px}
+  .detective-stage.is-stand>.cast:before{height:12%}
+  .talk-track .cast-bubble{padding:9px 12px;border-radius:12px}
+  .talk-track .cast-bubble p{font-size:12px;line-height:1.65}
+  .talk-track .cast-bubble:before{width:10px;height:10px;top:-6px;left:calc(var(--talk-x,50%) - 5px)}
+}
