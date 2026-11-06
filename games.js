@@ -16,13 +16,27 @@ export const gameCatalog = () => ({
 const correctIds = level => new Set(level.bins.flatMap(bin => bin.cards.filter(card => card.correct).map(card => card.id)));
 const errorLines = scene => scene.characters.map(character => character.line).filter(line => line.isError);
 
+// 投放关按「一次投对率」记分：分母是本节正确卡总数，扣掉投错过的卡（按张去重）。
+// 例如 9 张正确卡错投 1 张 → 89 分。80 分达标。
+// 找茬关误判即失败，能通关就一定没误判，再折算分数没有区分度，所以不记分。
+const PASS_LINE = 80;
+const scoreFor = (gameId, level, { misplaced, cleared }) => {
+  if (!cleared || gameId !== "sorting") return null;
+  const total = correctIds(level).size;
+  if (!total) return null;
+  const value = Math.max(0, Math.round(((total - misplaced.length) / total) * 100));
+  return { total: value, max: 100, passed: value >= PASS_LINE };
+};
+
 export function gameState(db, ownerId) {
   const runs = (db.gameRuns || []).filter(run => run.ownerId === ownerId);
   const latest = new Map();
   for (const run of runs) latest.set(run.gameId + ":" + run.levelId, run);
   const cleared = [...latest.values()].filter(run => run.cleared).map(run => ({ gameId: run.gameId, levelId: run.levelId, materialId: run.materialId, durationMs: run.durationMs, at: run.createdAt }));
+  // 通关也要保留薄弱点：投错会扣分，扣了分却在学习页一条都不标红，学员没法回去补。
+  // latest 每关只取最新一次，所以重玩通关不会累积旧的。找茬关通关等于全找到，天然是空。
   const weakPoints = [];
-  for (const run of latest.values()) if (!run.cleared) weakPoints.push(...run.weakPoints);
+  for (const run of latest.values()) weakPoints.push(...run.weakPoints);
   return { cleared, weakPoints, runs: runs.slice(-40) };
 }
 
@@ -33,13 +47,16 @@ function weakPointsFor(gameId, level, { misplaced, outcome, foundErrorIds, nodeI
     for (const bin of level.bins) {
       const wrongCards = bin.cards.filter(card => misplaced.includes(card.id));
       if (!wrongCards.length) continue;
-      points.set(bin.id, {
-        materialId: level.materialId,
-        pointIndex: bin.pointIndex,
-        binId: bin.id,
-        binTitle: bin.title,
-        reason: wrongCards[0].note
-      });
+      // 一个情形可能同时考几条知识点（例如“怎么记”+“要不要承诺保密”），逐条挂上。
+      for (const pointIndex of bin.pointIndexes || [bin.pointIndex]) {
+        points.set(bin.id + ":" + pointIndex, {
+          materialId: level.materialId,
+          pointIndex,
+          binId: bin.id,
+          binTitle: bin.title,
+          reason: wrongCards[0].note
+        });
+      }
     }
     return [...points.values()];
   }
@@ -90,9 +107,11 @@ export function recordGameRun(db, actor, payload, stamp = Date.now()) {
     materialId: level.materialId,
     title: gameMeta.find(game => game.id === gameId).name + " · " + level.title,
     cleared, outcome,
+    score: scoreFor(gameId, level, { misplaced, cleared }),
     durationMs,
     placed, misplaced, foundErrorIds,
-    weakPoints: cleared ? [] : weakPointsFor(gameId, level, { placed, misplaced, outcome, foundErrorIds, nodeId: payload.nodeId }),
+    // 通关也记：只要投错过就留下知识点，学习页据此标红。没投错时 weakPointsFor 本来就是空的。
+    weakPoints: weakPointsFor(gameId, level, { placed, misplaced, outcome, foundErrorIds, nodeId: payload.nodeId }),
     createdAt: new Date(stamp).toISOString()
   };
   db.gameRuns ||= [];

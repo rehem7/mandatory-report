@@ -18,13 +18,28 @@ test('每个普法主题都有可玩的关卡，知识点都指回学习材料�
     assert.ok(level, material.id + ' 缺少归类关卡');
     assert.ok(level.bins.length >= 2);
     assert.ok(level.keyLaws.length >= 1);
+    // 总结页的「涉及法条」也要能溯源，条号缺失或者自拟概括都算不合格。
+    for (const law of level.keyLaws) {
+      assert.match(law, /^(《未成年人保护法》第十一条第[二三]款|九部门《关于建立|九部门意见第)/, material.id + ' 重点法条缺少出处：' + law.slice(0, 24));
+    }
     for (const bin of level.bins) {
       const right = bin.cards.filter(card => card.correct), wrong = bin.cards.filter(card => !card.correct);
       assert.ok(right.length >= 3 && wrong.length >= 1, bin.id + ' 卡片配比不足');
       assert.ok(bin.pointIndex >= 0 && bin.pointIndex < material.points.length, bin.id + ' 知识点索引越界');
+      assert.ok((bin.pointIndexes || []).every(index => index >= 0 && index < material.points.length), bin.id + ' 知识点数组越界');
+      // 依据要写清出处再给条文：学员和评审都能顺着标签翻到那一条。
+      assert.match(bin.basis, /^(未保法第十一条|九部门意见第)/, bin.id + ' 依据缺少条文出处标签');
+      assert.ok(bin.basis.includes('：'), bin.id + ' 依据缺少出处分隔');
+      assert.ok(bin.basis.length >= 60, bin.id + ' 依据过短，出处加条文至少要到 60 字');
+      assert.ok(/应当|可以|不得|未履行/.test(bin.basis), bin.id + ' 依据应落成条文的义务表述');
+      assert.ok(!/病历书写规范|实务要求|保护实务|本情形/.test(bin.basis), bin.id + ' 依据应为条文内容，不接受自拟表述或对本栏的裁定');
+      assert.ok(bin.cards.every(card => !/未保法|九部门意见|第十一条/.test(card.text)), bin.id + ' 卡片区不应混入法条原文');
       assert.ok(bin.cards.every(card => card.note && card.text.length > 4), bin.id + ' 卡片缺少说明');
-      assert.equal(new Set(bin.cards.map(card => card.id)).size, bin.cards.length, bin.id + ' 卡片 id 重复');
+    assert.equal(new Set(bin.cards.map(card => card.id)).size, bin.cards.length, bin.id + ' 卡片 id 重复');
     }
+    // 同一关三栏的依据不能重复，不然学员翻一页又看到同一句，像是凑数。
+    const tags = level.bins.map(bin => bin.basis.split('：')[0]);
+    assert.equal(new Set(tags).size, tags.length, material.id + ' 同一关内依据出处重复：' + tags.join(' | '));
   }
   for (const scene of detectiveScenes) {
     const material = materials.find(item => item.id === scene.materialId);
@@ -42,6 +57,34 @@ test('每个普法主题都有可玩的关卡，知识点都指回学习材料�
   assert.equal(new Set(detectiveScenes.map(scene => scene.id)).size, detectiveScenes.length);
 });
 
+test('法条只当栏框依据，卡片里不应再出现法条原文', () => {
+  for (const level of sortingLevels) {
+    for (const bin of level.bins) {
+      const lawOnCard = bin.cards.filter(card => /第[一二三四五六七八九十百]+条|九部门意见|未成年人保护法：/.test(card.text));
+      assert.deepEqual(lawOnCard.map(card => card.id), [], bin.id + ' 的卡片里还混着法条原文');
+      assert.ok(bin.cards.every(card => typeof card.correct === 'boolean'), bin.id + ' 卡片缺少 correct 标记');
+    }
+  }
+});
+
+test('15 条知识点在投放关与找茬关合并后全覆盖', () => {
+  for (const material of materials) {
+    const covered = new Set();
+    const level = sortingLevels.find(item => item.materialId === material.id);
+    for (const bin of level.bins) for (const index of bin.pointIndexes) covered.add(index);
+    const scene = detectiveScenes.find(item => item.materialId === material.id);
+    for (const character of scene.characters) if (character.line.pointIndex != null) covered.add(character.line.pointIndex);
+    assert.deepEqual([...covered].sort(), material.points.map((_, index) => index), material.id + ' 还有知识点两个游戏都没考到');
+  }
+});
+
+test('学习材料的格式标签与岗位覆盖范围一致', () => {
+  for (const material of materials) {
+    const universal = material.roles.length > 1;
+    assert.ok(material.format.startsWith(universal ? '通用 · ' : '岗位 · '), material.id + ' 的格式标签与岗位范围对不上');
+  }
+});
+
 test('归类投放：投放未齐不算通关，全部投齐才通关并写入学习记录', () => {
   const db = learningFor('report-duty');
   const level = sortingLevels.find(item => item.materialId === 'report-duty');
@@ -54,11 +97,48 @@ test('归类投放：投放未齐不算通关，全部投齐才通关并写入�
 
   const done = recordGameRun(db, actor, { gameId: 'sorting', levelId: level.id, cleared: true, durationMs: 41000, placed: all, misplaced: [] });
   assert.equal(done.run.cleared, true);
-  assert.deepEqual(done.run.weakPoints, [], '通关后不再挂薄弱知识点');
+  assert.deepEqual(done.run.weakPoints, [], '一张都没投错，通关后自然没有薄弱知识点');
   assert.ok(done.record.gameClearedAt, '通关应标记到学习记录，供台账使用');
   assert.equal(gameState(db, 'a').cleared.length, 1);
-  assert.equal(gameState(db, 'a').weakPoints.length, 0, '通关会清掉同一关之前的薄弱知识点');
+  assert.equal(gameState(db, 'a').weakPoints.length, 0, '全程没投错，通关后不挂薄弱知识点');
   assert.equal(db.gameRuns.length, 2);
+});
+
+test('归类投放按一次投对率记分：全对满分，投错按张扣分，未通关不计分', () => {
+  const db = learningFor('report-duty');
+  const level = sortingLevels.find(item => item.materialId === 'report-duty');
+  const all = correctOf(level);
+
+  const perfect = recordGameRun(db, actor, { gameId: 'sorting', levelId: level.id, durationMs: 30000, placed: all, misplaced: [] });
+  assert.equal(perfect.run.cleared, true);
+  assert.equal(perfect.run.score.total, 100, '一张都没投错应得满分');
+  assert.equal(perfect.run.score.passed, true);
+
+  const wrongId = level.bins[0].cards.find(card => !card.correct).id;
+  const oneWrong = recordGameRun(db, actor, { gameId: 'sorting', levelId: level.id, durationMs: 36000, placed: all, misplaced: [wrongId] });
+  assert.equal(oneWrong.run.score.total, Math.round(((all.length - 1) / all.length) * 100), '投错一张按比例扣分');
+  assert.equal(oneWrong.run.score.max, 100);
+  // 投错已经扣了分，学习页就得能标红对应知识点——通关不等于全掌握。
+  assert.ok(oneWrong.run.weakPoints.length >= 1, '通关但投错过，薄弱知识点要保留');
+  assert.equal(oneWrong.run.weakPoints[0].binId, level.bins[0].id);
+  assert.ok(gameState(db, 'a').weakPoints.length >= 1, '通关后学习页仍应标红薄弱知识点');
+
+  // 同一张卡反复投错只扣一次（misplaced 按张去重）
+  const twice = recordGameRun(db, actor, { gameId: 'sorting', levelId: level.id, durationMs: 38000, placed: all, misplaced: [wrongId, wrongId] });
+  assert.equal(twice.run.score.total, oneWrong.run.score.total, '同一张卡反复投错不应重复扣分');
+
+  const partial = recordGameRun(db, actor, { gameId: 'sorting', levelId: level.id, durationMs: 9000, placed: all.slice(0, 3), misplaced: [wrongId] });
+  assert.equal(partial.run.cleared, false);
+  assert.equal(partial.run.score, null, '没通关不记分');
+});
+
+test('找茬关不折算分数：误判即失败，通关即全对', () => {
+  const scene = detectiveScenes[0];
+  const db = learningFor(scene.materialId);
+  const errors = scene.characters.filter(character => character.line.isError).map(character => character.line.id);
+  const done = recordGameRun(db, actor, { gameId: 'detective', levelId: scene.id, durationMs: 24000, foundErrorIds: errors, outcome: 'cleared' });
+  assert.equal(done.run.cleared, true);
+  assert.equal(done.run.score, null, '找茬关通关即全对，再折算分数没有区分度');
 });
 
 test('归类投放：投错的卡片记入错题明细，并定位到对应知识点', () => {

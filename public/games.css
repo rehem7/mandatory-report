@@ -36,9 +36,6 @@
 .game-card-ghost{position:fixed;z-index:9;pointer-events:none;opacity:.97;transition:none;border-color:#7cb356;background:#fff;max-height:46dvh;overflow:hidden;box-shadow:0 18px 38px #1633003d}
 .game-card-ghost.is-snapping{opacity:.82;border-color:#4d7f2b;box-shadow:0 10px 22px #1633002b}
 .game-dialog.is-dragging-now{user-select:none;cursor:grabbing}
-.card-kind{display:inline-block;font-size:9px;letter-spacing:.5px;line-height:1.7;padding:0 6px;border-radius:6px;background:#eef3e9;color:#456434;margin-bottom:6px}
-.game-card[data-tone="law"]{background:#f4f8fb;border-color:#d3e0ea}
-.game-card[data-tone="law"] .card-kind{background:#dce8f1;color:#33566d}
 .card-text{display:block;font-size:12px;color:var(--text);overflow-wrap:anywhere}
 .deck-empty{grid-column:1/-1;font-size:11px;color:var(--muted);margin:6px 0}
 
@@ -54,9 +51,25 @@
 .bin-label{font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
 .bin-count{font-size:12px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;transition:opacity .15s}
 .bin-prompt{font-size:11px;color:var(--body);margin:0}
+/* 栏框里的「依据」：法条是规则，不参与投放。
+   默认收起——一直摊在卡片旁边，等于替用户回答了「这个情形该不该报」，干扰项就白设了；
+   栏框收齐、或投错需要解释时才展开。 */
+.bin-basis{display:flex;gap:7px;align-items:flex-start;background:#f1f6e9;border:1px solid #dce7cc;border-radius:10px;padding:8px 10px}
+.basis-label{flex-shrink:0;font-size:9px;font-weight:700;letter-spacing:1px;color:#3f6b22;background:#e2f0d2;border-radius:5px;padding:2px 6px;margin-top:1px}
+.bin-basis p{margin:0;font-size:10.5px;line-height:1.6;color:#3d5233;overflow-wrap:anywhere}
+.bin-basis.is-sealed{background:#f7f6f2;border-style:dashed;border-color:#e2dfd5}
+.bin-basis.is-sealed .basis-label{background:#ecebe3;color:#8b8778}
+.bin-basis.is-sealed p{color:#8b8778}
+.bin-basis[data-tone="ok"]{background:#eef8e2;border-color:#bfdc9f;animation:basis-in .3s ease both}
+.bin-basis[data-tone="peek"]{background:#fdf3f1;border-color:#ecc9c1}
+.bin-basis[data-tone="peek"] .basis-label{background:#f8ded7;color:#a33a2b}
+.bin-basis[data-tone="peek"] p{color:#7c4034}
+@keyframes basis-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+/* 投错时贴在栏框顶部的解释条：不再依赖面板底部那行小字 */
+.bin-error{margin:0;font-size:11.5px;line-height:1.65;color:var(--red);background:#fff5f3;border:1px solid #f3d2cb;border-left:3px solid var(--red);border-radius:10px;padding:8px 10px;animation:chip-in .2s ease both}
+.bin-error b{font-weight:700}
 .bin-placed{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .chip{font-size:11.5px;line-height:1.5;padding:7px 11px;border-radius:10px;background:#fff;border:1px solid #cfe3bd;color:#26421a;animation:chip-in .24s ease both;overflow-wrap:anywhere}
-.chip[data-tone="law"]{background:#f4f8fb;border-color:#cfdfeb;color:#2f4a5e}
 .chip-empty{font-size:11px;color:var(--muted);padding:10px 0;text-align:center}
 
 .game-hint{font-size:11.5px;line-height:1.7;color:var(--muted);margin:0;min-height:20px}
@@ -66,6 +79,11 @@
 .game-foot{display:flex;align-items:center;gap:12px}
 .game-foot-actions{justify-content:flex-end}
 .game-foot .text-button{font-size:11px;color:var(--muted)}
+/* 栏框收齐后停在原地看依据，由这枚按钮推进到下一栏 */
+.foot-next{margin-left:auto;display:flex;flex-direction:column;align-items:center;gap:1px;border:none;border-radius:12px;padding:7px 16px;background:#4d7f2b;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px #4d7f2b33;animation:chip-in .24s ease both}
+.foot-next small{font-size:9.5px;font-weight:400;color:#e2f2d2;letter-spacing:.2px}
+.foot-next:hover{background:#446f26}
+.foot-next:active{transform:scale(.97)}
 .is-shake{animation:bin-shake .32s ease}
 @keyframes chip-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes bin-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
@@ -85,6 +103,11 @@
 .summary-laws{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .summary-laws li{font-size:11.5px;line-height:1.75;color:var(--body);padding-left:13px;position:relative}
 .summary-laws li:before{content:"";position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;background:var(--lime);border:1px solid #8bbf6b}
+/* 通关后集中回看：每一栏当时收着不给看的依据，在这里一次摊开 */
+.summary-basis-list{display:flex;flex-direction:column;gap:9px}
+.summary-basis{background:#f6faf0;border:1px solid #e2ecd5;border-radius:12px;padding:10px 12px}
+.summary-basis strong{display:block;font-size:11.5px;color:var(--ink);margin-bottom:4px}
+.summary-basis p{margin:0;font-size:11px;line-height:1.68;color:#4a5a41;overflow-wrap:anywhere}
 
 /* 找茬大侦探 */
 .game-rules-wrap{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:26px;align-items:start;padding:6px 0 14px}
@@ -121,6 +144,10 @@
 .report-button{display:inline-flex;flex-direction:column;align-items:center;gap:1px;border:0;border-radius:999px;padding:10px 26px;background:#e4572e;color:#fff;box-shadow:0 10px 26px #e4572e4d;transition:transform .14s,box-shadow .14s}
 .report-button:hover{transform:translateY(-1px);box-shadow:0 14px 30px #e4572e59}
 .report-button:active{transform:scale(.97)}
+/* 没选角色时按钮置灰：先点人、再定性，避免一进来就抢按 */
+.report-button[disabled]{background:#dfe3d8;color:#6b7364;box-shadow:none;cursor:not-allowed}
+.report-button[disabled]:hover{transform:none;box-shadow:none}
+.report-button[disabled] small{opacity:.72}
 .report-button span{font-size:14px;font-weight:800;letter-spacing:.4px}
 .report-button small{font-size:9px;opacity:.86}
 .fail-card{border:1px solid #eccfc9;background:var(--red-pale);border-radius:16px;padding:14px 16px}
@@ -152,6 +179,9 @@
   /* 手机上一屏放不下卡片区和栏框，把栏框置顶吸附，点卡片时它始终可见。 */
   .game-board{display:flex;flex-direction:column;gap:11px}
   .game-bin{order:-1;position:sticky;top:-1px;z-index:3;min-height:0;max-height:34dvh;overflow-y:auto;padding:11px 13px;box-shadow:0 8px 18px #16330014}
+  /* 依据展开后栏框内容变长（依据 + 已投放卡片），34dvh 里塞不下，会让人误以为卡片丢了。
+     收齐或投错时放宽高度：这两刻用户是在看依据，不是在挑卡片。 */
+  .game-bin.is-full,.game-bin[data-tone="error"]{max-height:48dvh}
   .game-entry-grid{grid-template-columns:1fr}
   .game-dialog{width:calc(100vw - 16px);max-height:94dvh;border-radius:20px}
   .game-shell{padding:16px 15px 14px}

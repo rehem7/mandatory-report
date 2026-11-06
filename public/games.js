@@ -72,7 +72,7 @@ const HOLD_MS = 160;  // 触屏按住多久算「提起卡片」
 const SLOP = 9;       // 手指先滑了这么远，说明用户是在滚页面，放弃拖拽
 
 function sortingGame(dialog, game, level, submit) {
-  const state = { bin: 0, placed: new Set(), misplaced: new Set(), picked: null, started: Date.now(), finished: false };
+  const state = { bin: 0, placed: new Set(), misplaced: new Set(), picked: null, started: Date.now(), finished: false, basisPeek: -1 };
   let ticker, drag = null, holdTimer = null;
   const bin = () => level.bins[state.bin];
   const pending = () => bin().cards.filter(card => !state.placed.has(card.id));
@@ -81,27 +81,36 @@ function sortingGame(dialog, game, level, submit) {
   const binEl = () => dialog.querySelector("[data-bin]");
   // 手机上栏框贴在卡片上方（sticky），桌面在右侧，提示文案要跟着方位走。
   const near = () => (matchMedia("(max-width: 860px)").matches ? "上方" : "右侧");
-  const defaultHint = () => `按住卡片拖进${near()}栏框，不适用的卡片留在卡片区；也可以点一下卡片选中，再点栏框投放。`;
+  const defaultHint = () => `按住卡片拖进${near()}栏框，不适用的卡片留在卡片区；也可以点一下卡片选中，再点栏框投放。收齐这一栏，依据才会展开。`;
 
   const head = () => `<header class="game-head"><div class="game-head-title"><span class="game-eyebrow">${esc(game.name)} · ${esc(level.title)}</span><h2>${esc(bin().title)}</h2></div><div class="game-hud"><span class="game-timer" data-timer>00:00</span><button type="button" class="icon-button" data-close aria-label="关闭游戏">×</button></div></header>`;
 
-  const cardHTML = card => `<button type="button" class="game-card${state.picked === card.id ? " is-picked" : ""}" data-card="${card.id}" data-tone="${card.tone}" aria-pressed="${state.picked === card.id}"><span class="card-kind">${card.tone === "law" ? "法条" : "做法"}</span><span class="card-text">${esc(card.text)}</span></button>`;
+  const cardHTML = card => `<button type="button" class="game-card${state.picked === card.id ? " is-picked" : ""}" data-card="${card.id}" aria-pressed="${state.picked === card.id}"><span class="card-text">${esc(card.text)}</span></button>`;
 
   const render = (note = "", tone = "") => {
-    const b = bin(), done = placedIn().length;
+    const b = bin(), done = placedIn().length, isFull = done >= requiredIn();
+    // 依据后置：栏框收齐、或者投错需要解释时才展开。一直摊在卡片旁边，
+    // 等于把「这个情形该不该报」提前替用户答了，干扰项就白设了。
+    const showBasis = isFull || state.basisPeek === state.bin;
+    // 投错时把解释放进栏框里（紧挨着投放动作），而不是塞到面板最底部那行小字里——手机上很容易看不见。
+    const binError = tone === "error" && note ? `<p class="bin-error" role="alert"><b>这张不能投：</b>${esc(note)}</p>` : "";
+    const basisBlock = showBasis
+      ? `<div class="bin-basis" data-tone="${isFull ? "ok" : "peek"}"><span class="basis-label">依据</span><p>${esc(b.basis)}</p></div>`
+      : `<div class="bin-basis is-sealed"><span class="basis-label">依据</span><p>收齐这一栏后展开，先自己判断。</p></div>`;
+    const hint = tone === "error" ? "换一张试试：红框里写了为什么不能投。这条情形的依据也已经展开，可以对照着看。" : note || (isFull ? `这一栏收齐了。${state.bin + 1 < level.bins.length ? "对照上面的依据看一遍，再进入下一栏。" : "对照依据看一遍，下面就是本关总结。"}` : defaultHint());
     dialog.innerHTML = `<div class="game-shell" data-game="sorting">
       ${head()}
       <div class="game-progress-track" aria-hidden="true">${level.bins.map((item, index) => `<span class="${index < state.bin ? "is-done" : index === state.bin ? "is-now" : ""}">${index + 1}</span>`).join("")}</div>
       <p class="game-scene">${esc(b.scene)}</p>
       <div class="game-board">
         <section class="game-deck" aria-label="做法卡片区">
-          <div class="deck-head"><h3>卡片区</h3><span class="deck-legend">浅蓝底是法条原文，白底是具体做法</span><span class="deck-count">还剩 ${pending().length} 张</span></div>
+          <div class="deck-head"><h3>卡片区</h3><span class="deck-legend">卡片都是具体处置；每一栏收齐后，依据才展开</span><span class="deck-count">还剩 ${pending().length} 张</span></div>
           <div class="deck-grid">${pending().map(cardHTML).join("") || `<p class="deck-empty">卡片已全部处理完，栏框正在收尾。</p>`}</div>
         </section>
-        <div class="game-bin" data-bin data-tone="${tone}" aria-live="polite"><div class="bin-top"><span class="bin-label">投放栏框</span><span class="bin-drop" aria-hidden="true">松手投放</span><span class="bin-count">${done} / ${requiredIn()}</span></div><p class="bin-prompt">${esc(b.prompt)}</p><ul class="bin-placed">${placedIn().map(card => `<li class="chip" data-tone="${card.tone}">${esc(card.text)}</li>`).join("") || `<li class="chip-empty">把卡片拖进来，松手就投放</li>`}</ul></div>
+        <div class="game-bin${isFull ? " is-full" : ""}" data-bin data-tone="${tone}" aria-live="polite"><div class="bin-top"><span class="bin-label">投放栏框</span><span class="bin-drop" aria-hidden="true">松手投放</span><span class="bin-count">${done} / ${requiredIn()}</span></div>${binError}<p class="bin-prompt">${esc(b.prompt)}</p>${basisBlock}<ul class="bin-placed">${placedIn().map(card => `<li class="chip">${esc(card.text)}</li>`).join("") || `<li class="chip-empty">把卡片拖进来，松手就投放</li>`}</ul></div>
       </div>
-      <p class="game-hint" id="game-hint" data-tone="${tone}" role="status">${esc(note || defaultHint())}</p>
-      <div class="game-foot"><button type="button" class="text-button" data-quit>退出本关</button></div>
+      <p class="game-hint" id="game-hint" data-tone="${tone === "error" ? "" : tone}" role="status">${esc(hint)}</p>
+      <div class="game-foot"><button type="button" class="text-button" data-quit>退出本关</button>${isFull ? `<button type="button" class="foot-next" data-next><span>${state.bin + 1 < level.bins.length ? "下一情形" : "看本关总结"}</span><small>依据已展开，看完再走</small></button>` : ""}</div>
     </div>`;
     dialog.querySelector("[data-timer]").textContent = clock(Date.now() - state.started);
   };
@@ -161,19 +170,20 @@ function sortingGame(dialog, game, level, submit) {
     state.picked = null;
     if (!card.correct) {
       state.misplaced.add(cardId);
-      render(card.note, "error");
-      dialog.querySelector("[data-bin]")?.classList.add("is-shake");
+      // 投错的这一刻正是最需要法条的时刻：把这一栏的依据摊开，属于即时反馈，不是提前给答案。
+      state.basisPeek = state.bin;
+      // 说明里带上卡片原文，用户不用自己回想"刚才投的是哪一张"。
+      render(`「${card.text}」——${card.note}`, "error");
+      const box = dialog.querySelector("[data-bin]");
+      box?.classList.add("is-shake");
+      // 手机上栏框贴在顶部，兜底把它滚进视口，别让解释落在屏幕外。
+      box?.scrollIntoView({ block: "nearest" });
       return;
     }
     state.placed.add(cardId);
     render();
-    if (placedIn().length < requiredIn()) return;
-    // 当前栏框收齐 → 自动进入下一个
-    setTimeout(() => {
-      if (!dialog.open) return;
-      if (state.bin + 1 < level.bins.length) { state.bin += 1; render("栏框已收齐，进入下一个情形。", "ok"); }
-      else summary();
-    }, 650);
+    // 收齐后停在这里，不再自动跳下一栏：依据在这一刻展开，
+    // 要留出时间让用户拿自己的判断跟法条对一遍，再由底部的「下一情形」推进。
   };
 
   const onPointerDown = event => {
@@ -233,7 +243,8 @@ function sortingGame(dialog, game, level, submit) {
       <div class="game-summary">
         <div class="summary-stats"><div><span>本局用时</span><strong>${fmtSeconds(elapsed)}</strong></div><div><span>完成栏框</span><strong>${level.bins.length} / ${level.bins.length}</strong></div><div><span>投放错误</span><strong>${state.misplaced.size} 张</strong></div></div>
         <section class="summary-block"><h3>错题明细</h3>${mistakes.length ? mistakes.map(entry => `<article class="summary-wrong"><strong>${esc(entry.item.title)}</strong>${entry.cards.map(card => `<p><b>${esc(card.text)}</b><small>${esc(card.note)}</small></p>`).join("")}</article>`).join("") : `<p class="muted">这一关一张卡片都没有投错。</p>`}</section>
-        <section class="summary-block"><h3>重点法条</h3><ul class="summary-laws">${level.keyLaws.map(law => `<li>${esc(law)}</li>`).join("")}</ul></section>
+        <section class="summary-block"><h3>各情形的依据</h3><div class="summary-basis-list">${level.bins.map(item => `<article class="summary-basis"><strong>${esc(item.title)}</strong><p>${esc(item.basis)}</p></article>`).join("")}</div></section>
+        <section class="summary-block"><h3>涉及法条</h3><ul class="summary-laws">${level.keyLaws.map(law => `<li>${esc(law)}</li>`).join("")}</ul></section>
       </div>
       <div class="game-foot game-foot-actions"><button type="button" class="text-button" data-quit>稍后再检验</button><button type="button" class="primary" data-complete>一键完成本节知识检验</button></div>
     </div>`;
@@ -252,6 +263,13 @@ function sortingGame(dialog, game, level, submit) {
   dialog.onclick = async event => {
     const target = event.target;
     if (target.closest("[data-close]")) return close(dialog);
+    if (target.closest("[data-next]")) {
+      if (state.bin + 1 < level.bins.length) {
+        state.bin += 1; state.basisPeek = -1;
+        render("这个情形收好了，进入下一个。", "ok");
+      } else summary();
+      return;
+    }
     if (target.closest("[data-quit]")) {
       const result = await submit({ cleared: false, durationMs: Date.now() - state.started, placed: [...state.placed], misplaced: [...state.misplaced], outcome: "unfinished" });
       if (result) toast("已退出本关，错过的知识点会在学习页标出来");
@@ -315,7 +333,7 @@ function detectiveGame(dialog, game, level, submit) {
     dialog.innerHTML = `<div class="game-shell" data-game="detective">
       <header class="game-head"><div class="game-head-title"><span class="game-eyebrow">${esc(game.name)} · ${esc(level.title)}</span><h2>先看清楚规则</h2></div><button type="button" class="icon-button" data-close aria-label="关闭游戏">×</button></header>
       <div class="game-rules-wrap">
-        <div class="game-rules"><ol><li>点击场景中的角色，查看他们在做什么、说什么。</li><li>三个人的说法都可以先看完，不用急着下判断。</li><li>确认之后，按右下角的「我发现错误！」。按在做法没问题的角色上，才算误判、本局失败。</li></ol><p class="muted">本场景共 <b>${errorLines.length}</b> 处错误，均为虚构情节。</p></div>
+        <div class="game-rules"><ol><li>点击场景中的角色，查看他们在做什么、说什么。</li><li>三个人的说法都可以先看完，不用急着下判断。</li><li>看完再决定：选定某一位之后，右下角的按钮会变成「确认某人有误」。按在做法没问题的角色身上，才算误判、本局失败。</li></ol><p class="muted">本场景共 <b>${errorLines.length}</b> 处错误，均为虚构情节。</p></div>
         <img class="rules-art" src="/assets/visual/rule-magnifier.webp" alt="" aria-hidden="true">
       </div>
       <div class="game-foot game-foot-actions"><button type="button" class="text-button" data-quit>退出</button><button type="button" class="primary" data-start>我明白了，开始</button></div>
@@ -325,12 +343,16 @@ function detectiveGame(dialog, game, level, submit) {
   const scene = note => {
     const active = activeCharacter();
     const foundNow = active?.line.isError && state.found.has(active.line.id);
+    // 判定按钮跟着「当前点开的角色」走：文案里带名字，才知道自己是在给谁定性，
+    // 也不会再被读成“立刻点我开始抓错”。没选人时按钮置灰，避免误触。
+    const reportLabel = !active ? "先点开一个角色" : foundNow ? "这一位已经记录" : `确认「${active.name}」有误`;
+    const reportSub = !active ? "看完三个人，再按这里" : foundNow ? "看看还有没有别人" : "按错人就算误判";
     // 台词卡固定在舞台下方的槽位里，箭头由 aimTalk 按实测位置指过去。
     const talkCard = active
       ? `<div class="cast-bubble ${foundNow ? "is-found" : ""}" role="status"><span class="bubble-from">${esc(active.name)} · ${esc(active.role)}</span><p>“${esc(active.line.text)}”</p>${foundNow ? `<small>这一点已经记下来了，继续看看其他人。</small>` : ""}</div>`
       : `<p class="cast-hint">点一个角色，看看他此刻的想法与做法。</p>`;
     // 提示行常驻：没有反馈时显示规则提醒，保证台词槽高度稳定、点角色时按钮不跳动。
-    const hintText = note || "先看完三个人，确认之后再按右下角的按钮。";
+    const hintText = note || "三个人的说法都可以先看完；选定某位后，右下角会变成「确认某人有误」。";
     const hintTone = !note ? "" : /找到/.test(note) ? "ok" : "picked";
     const hintLine = hintText ? `<p class="game-hint" data-tone="${hintTone}" role="status">${esc(hintText)}</p>` : "";
     dialog.innerHTML = `<div class="game-shell" data-game="detective">
@@ -342,7 +364,7 @@ function detectiveGame(dialog, game, level, submit) {
         <div class="cast">${level.characters.map(character => `<button type="button" class="cast-member ${state.active === character.id ? "is-active" : ""} ${state.found.has(character.line.id) ? "is-found" : ""}" data-cast="${character.id}" aria-pressed="${state.active === character.id}"${character.stance ? ` style="--cast-h:${character.stance}"` : ""}><img class="cast-figure" src="/assets/visual/cast/stand/${esc(character.id)}.webp" alt="" aria-hidden="true"><span class="cast-name">${esc(character.name)}</span><span class="cast-role">${esc(character.role)}</span></button>`).join("")}</div>
       </div>
       <div class="talk-track">${talkCard}${hintLine}</div>
-      <div class="game-foot detective-foot"><button type="button" class="text-button" data-quit>退出本关</button><button type="button" class="report-button" data-report><span>我发现错误！</span><small>先看完三个人，按错才失败</small></button></div>
+      <div class="game-foot detective-foot"><button type="button" class="text-button" data-quit>退出本关</button><button type="button" class="report-button" data-report ${!active || foundNow ? "disabled" : ""}><span>${esc(reportLabel)}</span><small>${esc(reportSub)}</small></button></div>
     </div>`;
     dialog.querySelector("[data-timer]").textContent = clock(Date.now() - state.started);
     bindArtFallback(dialog);
