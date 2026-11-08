@@ -16,10 +16,27 @@ export function gameEntriesHTML(material, games, state, { locked = false } = {})
   const pair = games?.byMaterial?.[material.id];
   if (!pair) return "";
   const cleared = new Set((state?.cleared || []).map(item => item.gameId + ":" + item.levelId));
-  const card = (game, level) => {
-    if (!game || !level) return "";
-    const done = cleared.has(game.id + ":" + level.id);
-    return `<article class="game-entry" data-tone="${game.tone}"><div class="game-entry-head"><span class="game-entry-icon">${icon(game.icon)}</span><div><h3>${esc(game.name)}</h3><p>${esc(game.tagline)} · ${game.minutes} 分钟</p></div><span class="badge ${done ? "" : "subtle"}">${done ? "已通关" : "未通关"}</span></div><p class="game-entry-level">关卡：${esc(level.title)}${game.id === "detective" ? ` · ${level.characters.length} 位角色` : ` · ${level.bins.length} 个栏框`}</p><p class="game-entry-desc">${esc(game.description)}</p><button type="button" class="${done && !locked ? "secondary" : "primary"}" data-play-game="${game.id}" data-play-level="${level.id}" ${locked ? "disabled" : ""}>${locked ? "完成主题练习后解锁" : done ? "再玩一次" : "开始闯关"}${locked ? "" : " →"}</button></article>`;
+  const done = (game, level) => cleared.has(game.id + ":" + level.id);
+  // 找茬关一节材料挂两个场景（pair.detective 是数组），投放关仍然是一个关卡。
+  const card = (game, levels) => {
+    const list = [].concat(levels || []).filter(Boolean);
+    if (!game || !list.length) return "";
+    const clearedCount = list.filter(level => done(game, level)).length;
+    const allDone = clearedCount === list.length;
+    // 主按钮指向"第一个还没通关的场景"，一关一关往下过；全通了就重玩第一关。
+    const next = list.find(level => !done(game, level)) || list[0];
+    const meta = game.id === "detective"
+      ? `${list.length} 个场景 · 每场 ${next.characters.length} 位角色`
+      : `${next.bins.length} 个栏框`;
+    // 多场景才出场景条；单场景（投放关）保持原来的样子，不多一行按钮。
+    const chips = list.length > 1
+      ? `<div class="game-entry-levels">${list.map((level, index) => `<button type="button" class="level-chip${done(game, level) ? " is-done" : ""}" data-play-game="${game.id}" data-play-level="${level.id}" ${locked ? "disabled" : ""}>${index + 1} · ${esc(level.title)}${done(game, level) ? "<span aria-hidden=\"true\"> ✓</span>" : ""}</button>`).join("")}</div>`
+      : "";
+    const badge = allDone ? "已通关" : list.length > 1 ? `已通 ${clearedCount}/${list.length}` : "未通关";
+    const label = locked ? "完成主题练习后解锁" : allDone ? "再玩一次" : clearedCount ? "继续下一个场景" : "开始闯关";
+    // 多场景时标题已经在下面的场景条里，这一行只报数量和角色数，免得同一句话出现两遍
+    const levelLine = list.length > 1 ? meta : `${esc(next.title)} · ${meta}`;
+    return `<article class="game-entry" data-tone="${game.tone}"><div class="game-entry-head"><span class="game-entry-icon">${icon(game.icon)}</span><div><h3>${esc(game.name)}</h3><p>${esc(game.tagline)} · ${game.minutes} 分钟</p></div><span class="badge ${allDone ? "" : "subtle"}">${badge}</span></div><p class="game-entry-level">关卡：${levelLine}</p><p class="game-entry-desc">${esc(game.description)}</p>${chips}<button type="button" class="${allDone && !locked ? "secondary" : "primary"}" data-play-game="${game.id}" data-play-level="${next.id}" ${locked ? "disabled" : ""}>${label}${locked ? "" : " →"}</button></article>`;
   };
   return `<section class="game-entries" aria-labelledby="game-entries-title"><div class="game-entries-head"><div><h3 id="game-entries-title">学完了，去检验一下</h3><p>两个小游戏都基于本节内容与对应法条，通关后计入培训台账。</p></div></div><div class="game-entry-grid">${card(games.games.find(game => game.id === "sorting"), pair.sorting)}${card(games.games.find(game => game.id === "detective"), pair.detective)}</div></section>`;
 }
@@ -312,6 +329,23 @@ function bindArtFallback(root) {
   });
 }
 
+/**
+ * 立绘没有 png 兜底：新场景的立绘还没到位时，缺图会显示破图。
+ * 换成姓名首字的占位块，关卡的逻辑照常能玩（点人、看台词、判定都不受影响）。
+ */
+function bindCastFallback(root, reposition) {
+  root.querySelectorAll(".cast-figure").forEach(figure => {
+    figure.addEventListener("error", () => {
+      const holder = document.createElement("span");
+      holder.className = "cast-figure cast-figure-fallback";
+      holder.setAttribute("aria-hidden", "true");
+      holder.textContent = (figure.dataset.initial || "?").slice(0, 1);
+      figure.replaceWith(holder);
+      reposition?.();
+    }, { once: true });
+  });
+}
+
 function detectiveGame(dialog, game, level, submit) {
   const errorLines = level.characters.map(character => character.line).filter(line => line.isError);
   const state = { found: new Set(), active: null, started: Date.now(), over: false, recorded: false };
@@ -361,13 +395,14 @@ function detectiveGame(dialog, game, level, submit) {
         <img class="stage-bg" src="/assets/visual/scenes/${esc(level.background || level.id)}.webp" data-png="/assets/visual/scenes/${esc(level.background || level.id)}.png" alt="" aria-hidden="true">
         <div class="stage-veil" aria-hidden="true"></div>
         <div class="stage-brief-card"><p class="stage-brief">${esc(level.brief)}</p><p class="stage-time">${esc(level.time)}</p></div>
-        <div class="cast">${level.characters.map(character => `<button type="button" class="cast-member ${state.active === character.id ? "is-active" : ""} ${state.found.has(character.line.id) ? "is-found" : ""}" data-cast="${character.id}" aria-pressed="${state.active === character.id}"${character.stance ? ` style="--cast-h:${character.stance}"` : ""}><img class="cast-figure" src="/assets/visual/cast/stand/${esc(character.id)}.webp" alt="" aria-hidden="true"><span class="cast-name">${esc(character.name)}</span><span class="cast-role">${esc(character.role)}</span></button>`).join("")}</div>
+        <div class="cast">${level.characters.map(character => `<button type="button" class="cast-member ${state.active === character.id ? "is-active" : ""} ${state.found.has(character.line.id) ? "is-found" : ""}" data-cast="${character.id}" aria-pressed="${state.active === character.id}"${character.stance ? ` style="--cast-h:${character.stance}"` : ""}><img class="cast-figure" src="/assets/visual/cast/stand/${esc(character.id)}.webp" data-initial="${esc(character.name)}" alt="" aria-hidden="true"><span class="cast-name">${esc(character.name)}</span><span class="cast-role">${esc(character.role)}</span></button>`).join("")}</div>
       </div>
       <div class="talk-track">${talkCard}${hintLine}</div>
       <div class="game-foot detective-foot"><button type="button" class="text-button" data-quit>退出本关</button><button type="button" class="report-button" data-report ${!active || foundNow ? "disabled" : ""}><span>${esc(reportLabel)}</span><small>${esc(reportSub)}</small></button></div>
     </div>`;
     dialog.querySelector("[data-timer]").textContent = clock(Date.now() - state.started);
     bindArtFallback(dialog);
+    bindCastFallback(dialog, aimTalk);
     const stage = dialog.querySelector(".detective-stage");
     stage?.classList.toggle("has-active", Boolean(stage.querySelector(".cast-member.is-active")));
     aimTalk();

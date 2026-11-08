@@ -199,6 +199,12 @@ export const sortingLevels = [
 ];
 
 // 找茬大侦探：场景 → 角色 → 台词。isError 标记该段情节是否违反强制报告要求。
+//
+// 每节普法材料挂两个场景：一个"室内对着专业人"的原场景，一个换场合、换说话人的新场景。
+// 换场合是为了考迁移——同一条"应当立即报告"，在邻居、志愿者、门卫、规培医生、社区副主任
+// 嘴里落点完全不同，认得出才是真会了。老关卡的台词一句没动，新关卡的错误台词才补。
+// 站位顺序（characters 数组）不再固定把错的人放最后：错的人在 1/2/3 位轮换，
+// 免得玩两关就学会"点最后那个人"。
 const line = (id, text, { error = false, pointIndex = null, knowledge = "" } = {}) => ({ id, text, isError: error, pointIndex, knowledge });
 
 export const detectiveScenes = [
@@ -268,6 +274,71 @@ export const detectiveScenes = [
       { id: "chen", name: "小陈", role: "网格员", stance: 0.99, line: line("chen-1", "这家是低保户，属于帮扶对象，先登记等街道安排就行。", { error: true, pointIndex: 1, knowledge: "生活困难不能替代报告判断；疑似侵害或危险应当及时报告。" }) },
       { id: "lin", name: "小林", role: "社区工作者", stance: 0.94, line: line("lin-1", "先把孩子照片发到业主群里，让大家一起帮忙找家长。", { error: true, pointIndex: 2, knowledge: "公开可识别信息会造成二次传播，材料仅应向有必要知悉的渠道提供。" }) }
     ]
+  },
+  {
+    id: "detective-threat",
+    materialId: "report-duty",
+    title: "群里的约架",
+    brief: "一名学生拿着手机来求助，说有人约好今天放学在巷口堵他。三个人正在商量先做什么。",
+    time: "下午 15:40 · 虚构社区青少年活动室",
+    misjudgePoint: 2,
+    characters: [
+      { id: "ajie", name: "阿杰", role: "学生", stance: 0.9, line: line("aj-1", "截图我都留着，发送时间和那个账号都在，我没删。") },
+      { id: "wu", name: "吴姐", role: "青少年社工", stance: 0.95, line: line("wu-1", "先看他今天怎么回家、有没有人能接，材料同时交给公安。") },
+      { id: "tang", name: "唐师傅", role: "活动室值班", stance: 1, line: line("tang-1", "小孩子网上吵两句，等真打起来再说，现在报太早。", { error: true, pointIndex: 2, knowledge: "报告不以后果已经发生为前提；出现具体威胁与近期危险就应当立即报告，不等自行查清。" }) }
+    ]
+  },
+  {
+    id: "detective-creator",
+    materialId: "evidence-privacy",
+    title: "被围攻的账号",
+    brief: "一名未成年博主的信息被挂到了本地群里，私信里还有人说要找上门。三个人在看这些截图。",
+    time: "傍晚 18:20 · 虚构青少年网络服务室",
+    misjudgePoint: 1,
+    characters: [
+      { id: "lan", name: "小岚", role: "未成年博主", stance: 0.89, line: line("lan-1", "私信和评论我都截了原图，时间也在，没往外发。") },
+      { id: "qiu", name: "邱哥", role: "志愿者", stance: 1, line: line("qiu-1", "把账号和截图发到本地大群吧，人多力量大，大家一起找这个人。", { error: true, pointIndex: 1, knowledge: "公开传播账号与截图会扩散可识别信息、造成二次伤害，材料只应向有必要知悉的渠道提供。" }) },
+      { id: "wu", name: "吴姐", role: "社工", stance: 0.95, line: line("wu-2", "材料只导出给公安一份，这里的转发先停住。") }
+    ]
+  },
+  {
+    id: "detective-gate",
+    materialId: "teacher-duty",
+    title: "放学前十分钟",
+    brief: "放学铃响前，三位老师在校门口说起一名学生：家里昨晚有争吵声，今天又被同学堵过一次。",
+    time: "傍晚 17:25 · 虚构学校校门口",
+    misjudgePoint: 0,
+    characters: [
+      { id: "ma", name: "老马", role: "门卫", stance: 1, line: line("ma-1", "家长都在门口等着了，先让孩子走，明天再问也不迟。", { error: true, pointIndex: 0, knowledge: "发现线索时要先确认孩子当前是否安全、有没有可靠的人陪同，不能把风险处置推给家长或推到明天。" }) },
+      { id: "li", name: "李老师", role: "班主任", stance: 0.93, line: line("li-2", "今天先不让她一个人走，我送她到有人接的地方。") },
+      { id: "wang", name: "王老师", role: "年级组长", stance: 0.96, line: line("wang-2", "两件事分开记：家里一条，被堵一条，都按她的原话写。") }
+    ]
+  },
+  {
+    id: "detective-night",
+    materialId: "doctor-duty",
+    title: "夜班急诊",
+    brief: "晚上九点多，一名孩子被送来处理伤口，陪同人说是在家摔的。三个人在处置室里。",
+    time: "夜间 21:15 · 虚构医院急诊处置室",
+    misjudgePoint: 2,
+    characters: [
+      { id: "zhou", name: "周医生", role: "值班医师", stance: 1, line: line("zhou-2", "先清创处理，部位、大小、颜色照实写，不写结论。") },
+      { id: "qian", name: "钱医生", role: "规培医生", stance: 0.99, line: line("qian-1", "家属说是摔的，病历就按摔伤写，别写那么多。", { error: true, pointIndex: 1, knowledge: "病历要客观记录伤情、就诊陈述和时间；用家属说法代替观察记录，会让后续核查失去原始信息。" }) },
+      { id: "xu", name: "许护士", role: "分诊护士", stance: 0.95, line: line("xu-2", "我问她一句现在安不安全，请陪同人在外面等一下。") }
+    ]
+  },
+  {
+    id: "detective-rental",
+    materialId: "community-duty",
+    title: "反锁的门",
+    brief: "走访时发现一户人家的门从外面锁着，里面有孩子的声音。邻居说这家人白天都出去做工。",
+    time: "上午 10:40 · 虚构城中村出租屋楼道",
+    misjudgePoint: 0,
+    characters: [
+      { id: "liu", name: "刘阿姨", role: "邻居", stance: 0.88, line: line("liu-2", "我先敲敲门，问问里面几个孩子、今天有没有吃的。") },
+      { id: "chen", name: "小陈", role: "网格员", stance: 0.94, line: line("chen-2", "大人去哪、几点回来、有没有别的亲属能来，我一项项记清楚。") },
+      { id: "fang", name: "方姐", role: "社区副主任", stance: 1, line: line("fang-1", "是亲戚帮忙看着，属于家里自己的安排，这个不用报。", { error: true, pointIndex: 1, knowledge: "长期无人照料本身就属于应当报告的情形；以「亲戚帮忙」「家庭安排」为由不报，是错的。" }) }
+    ]
   }
 ];
 
@@ -297,7 +368,8 @@ export const levelOf = (gameId, levelId) => {
   return levels.find(item => item.id === levelId) || null;
 };
 // 关卡挂在哪一节普法材料下，用于学习页的入口与薄弱知识点定位。
+// 找茬关一节材料有两个场景，所以返回数组；投放关仍然是一个关卡。
 export const levelsForMaterial = materialId => ({
   sorting: sortingLevels.find(level => level.materialId === materialId) || null,
-  detective: detectiveScenes.find(scene => scene.materialId === materialId) || null
+  detective: detectiveScenes.filter(scene => scene.materialId === materialId)
 });

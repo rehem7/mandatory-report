@@ -172,6 +172,11 @@
 .game-entry-level{font-size:10.5px;color:var(--muted);margin:0}
 .game-entry-desc{font-size:11.5px;line-height:1.7;color:var(--body);margin:0;flex:1}
 .game-entry button{align-self:flex-start;font-size:12px;padding:8px 16px;min-height:36px;margin-top:2px}
+/* 一节材料挂两个找茬场景时，每个场景一个小按钮；主按钮只指向"下一个还没通关的场景" */
+.game-entry-levels{display:flex;flex-wrap:wrap;gap:6px}
+.game-entry .level-chip{align-self:auto;margin:0;min-height:0;font-size:10.5px;font-weight:600;line-height:1.4;padding:5px 10px;border-radius:999px;border:1px solid #d8e3cd;background:#f8fbf3;color:#42552f}
+.game-entry .level-chip:hover{border-color:#9ec77f;background:#f1f8e7}
+.game-entry .level-chip.is-done{background:#eef8e2;border-color:#bfdc9f;color:#3d6a24}
 .lesson-point.is-weak{color:var(--red);font-weight:600;position:relative;padding-left:0}
 .lesson-point.is-weak:after{content:"待巩固";font-size:9px;font-weight:700;color:#fff;background:var(--red);border-radius:999px;padding:1px 7px;margin-left:8px;vertical-align:2px}
 
@@ -237,6 +242,14 @@
   display:block;height:100%;width:auto;flex:0 0 auto;
   filter:drop-shadow(0 10px 16px #16330024);
   transition:transform .18s ease,filter .18s ease;
+}
+/* 立绘缺图时的占位：新场景的立绘还没到位，用姓名首字站牌顶上，关卡的交互照常能用 */
+.detective-stage.is-stand .cast-figure.cast-figure-fallback{
+  display:grid;place-items:center;height:100%;width:auto;aspect-ratio:.52;
+  border-radius:28px 28px 10px 10px;border:1px dashed #a9bf95;
+  background:linear-gradient(180deg,#e7efdd,#ceddbb);
+  color:#4b6b31;font-size:clamp(18px,2.1vw,26px);font-weight:800;letter-spacing:2px;
+  filter:none;
 }
 .detective-stage.is-stand .cast-name{
   position:absolute;left:50%;bottom:9px;transform:translateX(-50%);

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { materials } from '../content.js';
 import { sortingLevels, detectiveScenes, gameMeta } from '../game-content.js';
-import { recordGameRun, gameState } from '../games.js';
+import { recordGameRun, gameState, gameCatalog } from '../games.js';
 
 const actor = { ownerId: 'a', profile: { id: 'a-profile' } }, other = { ownerId: 'b', profile: { id: 'b-profile' } };
 const learningFor = (...materialIds) => ({ learning: materialIds.map((materialId, index) => ({ id: 'r' + index, ownerId: 'a', materialId, title: materialId, completedAt: new Date().toISOString() })), gameRuns: [] });
@@ -67,8 +67,36 @@ test('法条只当栏框依据，卡片里不应再出现法条原文', () => {
   }
 });
 
-test('15 条知识点在投放关与找茬关合并后全覆盖', () => {
+test('找茬：每节材料两个场景，换场合而不换法条', () => {
   for (const material of materials) {
+    const scenes = detectiveScenes.filter(scene => scene.materialId === material.id);
+    assert.equal(scenes.length, 2, material.id + ' 应该有 2 个找茬场景');
+    assert.notEqual(scenes[0].title, scenes[1].title);
+    // 两个场景的场合要真的不同，否则只是换了个标题
+    assert.notEqual(scenes[0].time, scenes[1].time, material.id + ' 两个场景的时间地点重复');
+  }
+  // 台词、知识点、id 都不能复制粘贴：同一句话考两次，等于只考了一次
+  const texts = detectiveScenes.flatMap(scene => scene.characters.map(character => character.line.text));
+  assert.equal(new Set(texts).size, texts.length, '台词有重复');
+  const lineIds = detectiveScenes.flatMap(scene => scene.characters.map(character => character.line.id));
+  assert.equal(new Set(lineIds).size, lineIds.length, '台词 id 有重复');
+  const knowledge = detectiveScenes.flatMap(scene => scene.characters.filter(character => character.line.isError).map(character => character.line.knowledge));
+  assert.equal(new Set(knowledge).size, knowledge.length, '错误情节的知识点有重复');
+  // 错的人不能永远站在最右边：玩两关就学会"点第三个"，关卡就失去意义
+  const positions = detectiveScenes.map(scene => scene.characters.findIndex(character => character.line.isError));
+  assert.ok(new Set(positions).size >= 2, '错误角色总在同一个位置');
+});
+
+test('关卡目录按材料分发，找茬是一组场景', () => {
+  const catalog = gameCatalog();
+  for (const material of materials) {
+    const pair = catalog.byMaterial[material.id];
+    assert.ok(pair?.sorting, material.id + ' 缺少投放关');
+    assert.equal(pair.detective.length, 2, material.id + ' 的找茬关应该下发 2 个场景');
+  }
+});
+
+test('15 条知识点在投放关与找茬关合并后全覆盖', () => {  for (const material of materials) {
     const covered = new Set();
     const level = sortingLevels.find(item => item.materialId === material.id);
     for (const bin of level.bins) for (const index of bin.pointIndexes) covered.add(index);
