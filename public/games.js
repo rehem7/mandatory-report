@@ -25,9 +25,12 @@ export function gameEntriesHTML(material, games, state, { locked = false } = {})
     const allDone = clearedCount === list.length;
     // 主按钮指向"第一个还没通关的场景"，一关一关往下过；全通了就重玩第一关。
     const next = list.find(level => !done(game, level)) || list[0];
+    // 三个游戏的关卡体量说法不同：投放看栏框数、找茬看场景与角色数、两难看题目数。
     const meta = game.id === "detective"
       ? `${list.length} 个场景 · 每场 ${next.characters.length} 位角色`
-      : `${next.bins.length} 个栏框`;
+      : game.id === "dilemma"
+        ? `${next.questions.length} 道两难题`
+        : `${next.bins.length} 个栏框`;
     // 多场景才出场景条；单场景（投放关）保持原来的样子，不多一行按钮。
     const chips = list.length > 1
       ? `<div class="game-entry-levels">${list.map((level, index) => `<button type="button" class="level-chip${done(game, level) ? " is-done" : ""}" data-play-game="${game.id}" data-play-level="${level.id}" ${locked ? "disabled" : ""}>${index + 1} · ${esc(level.title)}${done(game, level) ? "<span aria-hidden=\"true\"> ✓</span>" : ""}</button>`).join("")}</div>`
@@ -38,7 +41,7 @@ export function gameEntriesHTML(material, games, state, { locked = false } = {})
     const levelLine = list.length > 1 ? meta : `${esc(next.title)} · ${meta}`;
     return `<article class="game-entry" data-tone="${game.tone}"><div class="game-entry-head"><span class="game-entry-icon">${icon(game.icon)}</span><div><h3>${esc(game.name)}</h3><p>${esc(game.tagline)} · ${game.minutes} 分钟</p></div><span class="badge ${allDone ? "" : "subtle"}">${badge}</span></div><p class="game-entry-level">关卡：${levelLine}</p><p class="game-entry-desc">${esc(game.description)}</p>${chips}<button type="button" class="${allDone && !locked ? "secondary" : "primary"}" data-play-game="${game.id}" data-play-level="${next.id}" ${locked ? "disabled" : ""}>${label}${locked ? "" : " →"}</button></article>`;
   };
-  return `<section class="game-entries" aria-labelledby="game-entries-title"><div class="game-entries-head"><div><h3 id="game-entries-title">学完了，去检验一下</h3><p>两个小游戏都基于本节内容与对应法条，通关后计入培训台账。</p></div></div><div class="game-entry-grid">${card(games.games.find(game => game.id === "sorting"), pair.sorting)}${card(games.games.find(game => game.id === "detective"), pair.detective)}</div></section>`;
+  return `<section class="game-entries" aria-labelledby="game-entries-title"><div class="game-entries-head"><div><h3 id="game-entries-title">学完了，去检验一下</h3><p>三个小游戏都基于本节内容与对应法条，通关后计入培训台账。</p></div></div><div class="game-entry-grid">${card(games.games.find(game => game.id === "sorting"), pair.sorting)}${card(games.games.find(game => game.id === "detective"), pair.detective)}${card(games.games.find(game => game.id === "dilemma"), pair.dilemma)}</div></section>`;
 }
 
 function ensureDialog() {
@@ -80,7 +83,9 @@ export async function openGame({ gameId, levelId, games, onFinish }) {
     } catch (error) { toast(error.message); return null; }
   };
   open(dialog);
-  if (gameId === "sorting") sortingGame(dialog, game, level, submit); else detectiveGame(dialog, game, level, submit);
+  if (gameId === "sorting") sortingGame(dialog, game, level, submit);
+  else if (gameId === "dilemma") dilemmaGame(dialog, game, level, submit);
+  else detectiveGame(dialog, game, level, submit);
 }
 
 /* ---------------- 归类投放闯关 ---------------- */
@@ -478,5 +483,129 @@ function detectiveGame(dialog, game, level, submit) {
   };
 
   activeCleanup = () => { clearInterval(ticker); dialog.onclick = null; window.removeEventListener("resize", aimTalk); };
+  rules();
+}
+
+/* ---------------- 两难抉择 ---------------- */
+
+/**
+ * 两难抉择：每题两条路，场上没有人明显违规，只有一条符合报告职责。
+ *
+ * 选错不判负，而是把这条路的代价摊开，再把另一条留成可点——两难的重点不是考倒人，
+ * 是让人看见"另一个选择也是好心，但代价落在这里"。首答会记下来：换一条选对算通关，
+ * 但学习页仍会标出这一条待巩固。
+ */
+function dilemmaGame(dialog, game, level, submit) {
+  const answers = level.questions.map(question => question.options.find(option => option.correct).id);
+  const state = { index: 0, first: [], final: [], picked: null, started: Date.now(), over: false, submitted: false };
+  const current = () => level.questions[state.index];
+  const chosen = () => current().options.find(option => option.id === state.picked) || null;
+  const isLast = () => state.index === level.questions.length - 1;
+  const answered = () => state.final.filter(Boolean);
+
+  const rules = () => {
+    state.started = Date.now();
+    dialog.innerHTML = `<div class="game-shell" data-game="dilemma">
+      <header class="game-head"><div class="game-head-title"><span class="game-eyebrow">${esc(game.name)} · ${esc(level.title)}</span><h2>先看清楚规则</h2></div><button type="button" class="icon-button" data-close aria-label="关闭游戏">×</button></header>
+      <div class="game-rules"><ol><li>每题给两条路，都像是认真负责的人会做的决定，不靠语气分辨。</li><li>只有一条符合报告职责；另一条路上的代价，会在选完之后展开。</li><li>选错了不判负，可以换一条重选。但第一遍选的那条会记下来，通关后仍标为待巩固。</li></ol><p class="muted">本关共 <b>${level.questions.length}</b> 道题。${esc(level.intro)}</p></div>
+      <div class="game-foot game-foot-actions"><button type="button" class="text-button" data-quit>退出</button><button type="button" class="primary" data-start>我明白了，开始</button></div>
+    </div>`;
+  };
+
+  /* 依据只在选完一条路之后展开：提前摊开等于把答案写在选项旁边。 */
+  const basisHTML = option => !option
+    ? `<div class="bin-basis is-sealed"><span class="basis-label">依据</span><p>选完一条路之后展开。</p></div>`
+    : `<div class="bin-basis" data-tone="${option.correct ? "ok" : "peek"}"><span class="basis-label">依据</span><p>${esc(current().basis)}</p></div>`;
+
+  const render = () => {
+    const question = current(), option = chosen();
+    const optionsHTML = question.options.map((item, index) => {
+      const isPicked = state.picked === item.id;
+      // 选对了把两条都锁上；选错了只锁错的那条，另一条留着让人换过去。
+      const locked = Boolean(option?.correct) || (isPicked && !item.correct);
+      // 选错之后给正确的那条一个浅底提示：不是给答案，是告诉你还有一条没看。
+      const tone = isPicked ? (item.correct ? " is-right" : " is-wrong") : option && !option.correct && item.correct ? " is-alt" : "";
+      return `<button type="button" class="dilemma-option${tone}" data-option="${item.id}"${locked ? " disabled" : ""}><span class="opt-label" aria-hidden="true">${index === 0 ? "A" : "B"}</span><span class="opt-text">${esc(item.text)}</span></button>`;
+    }).join("");
+
+    const resultHTML = !option ? "" : `<div class="dilemma-result" data-tone="${option.correct ? "ok" : "bad"}" role="status"><strong>${option.correct ? "这条路走得通" : "这条路的代价"}</strong><p>${esc(option.outcome)}</p><small>${esc(option.note)}</small>${option.correct ? "" : `<small class="dilemma-alt-tip">另一条路可以点开看看。两边的结果都会记在这一题里。</small>`}</div>`;
+
+    const hint = !option
+      ? "两条路都说得通。选一条，看看它的结果。"
+      : option.correct
+        ? "这条路走得通。对照依据看一眼，再继续。"
+        : "这条路走不通。另一条还开着，可以换过去。";
+    const tone = !option ? "" : option.correct ? "ok" : "error";
+
+    dialog.innerHTML = `<div class="game-shell" data-game="dilemma">
+      <header class="game-head"><div class="game-head-title"><span class="game-eyebrow">${esc(game.name)} · ${esc(level.title)}</span><h2>${esc(question.title)}</h2></div><div class="game-hud"><span class="game-timer" data-timer>00:00</span><button type="button" class="icon-button" data-close aria-label="关闭游戏">×</button></div></header>
+      <div class="game-progress-track" aria-hidden="true">${level.questions.map((_, index) => `<span class="${index < state.index ? "is-done" : index === state.index ? "is-now" : ""}">${index + 1}</span>`).join("")}</div>
+      <p class="game-scene">${esc(question.setup)}</p>
+      <div class="dilemma-options">${optionsHTML}</div>
+      ${resultHTML}
+      ${basisHTML(option)}
+      <p class="game-hint" data-tone="${tone}" role="status">${esc(hint)}</p>
+      <div class="game-foot"><button type="button" class="text-button" data-quit>退出本关</button>${option?.correct ? `<button type="button" class="foot-next" data-next><span>${isLast() ? "看本关总结" : "下一题"}</span><small>${isLast() ? "通关后计入台账" : "选对了，继续"}</small></button>` : ""}</div>
+    </div>`;
+    dialog.querySelector("[data-timer]").textContent = clock(Date.now() - state.started);
+  };
+
+  const ticker = setInterval(() => { const el = dialog.querySelector("[data-timer]"); if (el) el.textContent = clock(Date.now() - state.started); }, 500);
+
+  const summary = async () => {
+    state.over = true;
+    clearInterval(ticker);
+    const elapsed = Date.now() - state.started;
+    if (!state.submitted) {
+      state.submitted = true;
+      await submit({ cleared: true, outcome: "cleared", durationMs: elapsed, choices: answered(), firstChoices: state.first.filter(Boolean) });
+    }
+    // 首答偏了的题才进总结：换一条选对说明当场纠正了，但第一反应值得回看一眼。
+    const misses = level.questions
+      .map((question, index) => ({ question, first: state.first[index], index }))
+      .filter(entry => entry.first && entry.first !== answers[entry.index]);
+    const firstRight = level.questions.filter((question, index) => state.first[index] === answers[index]).length;
+    dialog.innerHTML = `<div class="game-shell" data-game="dilemma">
+      <header class="game-head"><div class="game-head-title"><span class="game-eyebrow">${esc(game.name)} · 通关</span><h2>${esc(level.title)} 全部完成</h2></div><button type="button" class="icon-button" data-close aria-label="关闭游戏">×</button></header>
+      <div class="game-summary">
+        <div class="summary-stats"><div><span>本局用时</span><strong>${fmtSeconds(elapsed)}</strong></div><div><span>首答就选对</span><strong>${firstRight} / ${level.questions.length}</strong></div><div><span>完成题目</span><strong>${level.questions.length} / ${level.questions.length}</strong></div></div>
+        <section class="summary-block"><h3>首答偏了的几道</h3>${misses.length ? misses.map(entry => {
+          const wrong = entry.question.options.find(option => option.id === entry.first);
+          return `<article class="summary-wrong"><strong>${esc(entry.question.title)}</strong><p><b>你第一遍选的：${esc(wrong?.text || "")}</b><small>结果：${esc(wrong?.outcome || "")}</small><small>为什么不行：${esc(wrong?.note || "")}</small></p></article>`;
+        }).join("") : `<p class="muted">每一道都一次选对。</p>`}</section>
+        <section class="summary-block"><h3>涉及法条</h3><ul class="summary-laws">${(level.keyLaws || []).map(law => `<li>${esc(law)}</li>`).join("")}</ul></section>
+      </div>
+      <div class="game-foot game-foot-actions"><button type="button" class="primary" data-close>完成本次检验</button></div>
+    </div>`;
+    toast("通关记录已写入培训台账");
+  };
+
+  dialog.onclick = async event => {
+    const target = event.target;
+    if (target.closest("[data-close]")) return close(dialog);
+    if (target.closest("[data-quit]")) {
+      if (!state.over) await submit({ cleared: false, outcome: "unfinished", durationMs: Date.now() - state.started, choices: answered(), firstChoices: state.first.filter(Boolean) });
+      return close(dialog);
+    }
+    if (target.closest("[data-start]")) return render();
+    if (target.closest("[data-next]")) {
+      if (isLast()) return summary();
+      state.index += 1;
+      state.picked = null;
+      return render();
+    }
+    const button = target.closest("[data-option]");
+    if (button && !button.disabled) {
+      const option = current().options.find(item => item.id === button.dataset.option);
+      if (!option || state.picked === option.id) return;
+      // 首答只在第一次落笔时记下，后面换一条不覆盖——否则"首答偏了"就失去了意义。
+      if (state.first[state.index] === undefined) state.first[state.index] = option.id;
+      state.final[state.index] = option.id;
+      state.picked = option.id;
+      return render();
+    }
+  };
+
+  activeCleanup = () => { clearInterval(ticker); dialog.onclick = null; };
   rules();
 }
