@@ -212,132 +212,132 @@ export const detectiveScenes = [
     id: "detective-desk",
     materialId: "report-duty",
     title: "值班室里的三个人",
-    brief: "一位邻居到社区值班室反映情况，三个人给出了三种回应。",
+    brief: "你是社区值班员。上午九点，一位邻居拿着在楼道里看到的情况找上门，接待员和同事都在场。",
     time: "上午 09:05 · 虚构社区值班室",
     misjudgePoint: 1,
     characters: [
-      { id: "neighbor", name: "张阿姨", role: "邻居", stance: 0.9, line: line("nb-1", "我看见孩子胳膊上有伤，先来跟你们说一声，你们看要不要报警。") },
-      { id: "duty", name: "小林", role: "值班员", stance: 0.94, line: line("duty-1", "我把您说的时间和看到的情况记下来，马上按程序向公安报告。") },
-      { id: "desk", name: "老陈", role: "接待", stance: 1, line: line("desk-1", "您又不是孩子家里人，这事轮不到您报，别管了。", { error: true, pointIndex: 0, knowledge: "任何组织和个人都有权检举、控告；以“不是亲属”“不是监护人”为由把人挡回去，是错的。" }) }
+      { id: "neighbor", name: "张阿姨", role: "邻居", stance: 0.9, line: line("nb-1", "孩子胳膊上两块淤青，我问了两遍她都不吭声。我先来跟你们说一声，这种事到底该谁管？") },
+      { id: "duty", name: "小林", role: "值班员", stance: 0.94, line: line("duty-1", "您先别急着走。看到的时间、部位、孩子当时的反应，我按您原话记一遍，现在就报给公安。") },
+      { id: "desk", name: "老陈", role: "接待", stance: 1, line: line("desk-1", "您既不是监护人也不是亲属，报上去也立不了案。先登记一下，等孩子家里人来问再说。", { error: true, pointIndex: 0, knowledge: "任何组织和个人都有权检举、控告；以“不是亲属”“立不了案”为由把人挡回去，是错的。" }) }
     ]
   },
   {
     id: "detective-group",
     materialId: "evidence-privacy",
     title: "家长群里的照片",
-    brief: "一位家长在群里提议用照片一起认人，两位老师正在商量怎么处理。",
+    brief: "你是班主任。下午四点半，家长群里突然有人提议用照片认人，年级主任的电话同时打了进来。",
     time: "下午 16:30 · 虚构班级家长群",
     misjudgePoint: 1,
     characters: [
-      { id: "head", name: "何老师", role: "班主任", stance: 0.94, line: line("he-1", "我把发现的时间和孩子的原话记下来，材料只交给需要知道的部门。") },
-      { id: "grade", name: "孙主任", role: "年级主任", stance: 1, line: line("sun-1", "先别在群里说，孩子的信息越少人知道越好。") },
-      { id: "parent", name: "一位家长", role: "群成员", stance: 0.93, line: line("par-1", "把照片发群里吧，大家一起认认是谁家的孩子。", { error: true, pointIndex: 1, knowledge: "公开传播可识别信息会造成二次伤害，材料仅应向有必要知悉的渠道提供。" }) }
+      { id: "head", name: "何老师", role: "班主任", stance: 0.94, line: line("he-1", "截图原文件我先存下来，时间、来源、谁发的，一条条记清楚，不自己加判断。") },
+      { id: "grade", name: "孙主任", role: "年级主任", stance: 1, line: line("sun-1", "群里的转发先停住。孩子的信息，知道的人越少越好，该报的部门我这边报。") },
+      { id: "parent", name: "一位家长", role: "群成员", stance: 0.93, line: line("par-1", "照片拍得挺清楚，发群里让大家一起认认，说不定有人认识这孩子。", { error: true, pointIndex: 1, knowledge: "公开传播可识别信息会造成二次伤害，材料仅应向有必要知悉的渠道提供。" }) }
     ]
   },
   {
     id: "detective-office",
     materialId: "teacher-duty",
     title: "办公室里的对话",
-    brief: "放学后的办公室，三位老师正在讨论一位手臂有淤青的学生。",
+    brief: "你是班主任。放学后办公室里，一位手臂有淤青的学生刚被留下，年级组长和教导主任都在。",
     time: "傍晚 17:40 · 虚构学校办公室",
     // 误判（在正确情节上按了报错）时提示的知识点
     misjudgePoint: 2,
     characters: [
-      { id: "li", name: "李老师", role: "班主任", stance: 0.94, line: line("li-1", "我先陪孩子坐一会儿，确认她今天放学后有没有安全的地方可以去。") },
-      { id: "wang", name: "王老师", role: "年级组长", stance: 0.93, line: line("wang-1", "把发现的时间和孩子的原话记下来，别再让她重复讲一遍。") },
-      { id: "zhao", name: "赵主任", role: "教导处", stance: 1, line: line("zhao-1", "这是学生家里的事，让家长自己解决，我们先不上报。", { error: true, pointIndex: 2, knowledge: "内部汇报、家长沟通都不能替代报告；发现疑似侵害应当立即报告。" }) }
+      { id: "li", name: "李老师", role: "班主任", stance: 0.94, line: line("li-1", "我先陪她坐一会儿。今天放学谁接、家里现在什么情况，先问清楚。") },
+      { id: "wang", name: "王老师", role: "年级组长", stance: 0.93, line: line("wang-1", "她讲过的话我按原话记，别再让她对着不同的人反复讲一遍。") },
+      { id: "zhao", name: "赵主任", role: "教导处", stance: 1, line: line("zhao-1", "先别急着报。把情况查实、证据凑齐了再一起往上报，报错了不好收场。", { error: true, pointIndex: 2, knowledge: "内部汇报、家长沟通都不能替代报告；也不能以“证据还没凑齐”为由延迟，发现疑似侵害就应立即报告。" }) }
     ]
   },
   {
     id: "detective-clinic",
     materialId: "doctor-duty",
     title: "诊室门口",
-    brief: "一名未成年人因伤就诊，陪同人在诊室门口反复催促。",
+    brief: "你是接诊医师。一名未成年人因伤就诊，陪同人在诊室门口已经催了两次。",
     time: "上午 10:20 · 虚构医院诊室",
     misjudgePoint: 1,
     characters: [
-      { id: "zhou", name: "周医生", role: "接诊医师", stance: 1, line: line("zhou-1", "先做必要检查和处理，把伤情和就诊时的陈述客观写进病历。") },
-      { id: "xu", name: "许护士", role: "分诊台", stance: 0.96, line: line("xu-1", "孩子说想单独说几句话，我陪她进去，请陪同人在外面稍等。") },
-      { id: "kin", name: "陪同亲属", role: "陪同人", stance: 0.99, line: line("kin-1", "你们要是敢报警，我现在就把孩子带走。", { error: true, pointIndex: 2, knowledge: "陪同人阻挠不能免除报告义务，应优先保障未成年人安全并请求有关部门协助。" }) }
+      { id: "zhou", name: "周医生", role: "接诊医师", stance: 1, line: line("zhou-1", "先处理伤口。伤在哪、多大、什么形态，还有孩子自己怎么说的，分开写清楚。") },
+      { id: "xu", name: "许护士", role: "分诊台", stance: 0.96, line: line("xu-1", "孩子说想单独讲两句，我带她进去，请家属在外面稍等几分钟。") },
+      { id: "kin", name: "陪同亲属", role: "陪同人", stance: 0.99, line: line("kin-1", "孩子淘气，家里管教得重了点，你们别往上报。我们回去注意就是了。", { error: true, pointIndex: 2, knowledge: "家属承诺“回去注意”不能替代报告；陪同人阻挠更不能，应优先保障未成年人安全并请求有关部门协助。" }) }
     ]
   },
   {
     id: "detective-community",
     materialId: "community-duty",
     title: "社区走访",
-    brief: "社区走访时，三个人给出了三种处理办法。这里有两处违反了强制报告要求。",
+    brief: "你是社区工作者。走访到这栋老楼，楼道里的孩子已经连续三晚没人接回家，两位同事看法不一致。",
     time: "下午 15:10 · 虚构老旧小区楼道",
     background: "detective-visit",
     misjudgePoint: 1,
     characters: [
-      { id: "liu", name: "刘阿姨", role: "邻居", stance: 0.88, line: line("liu-1", "孩子这两天都在门口坐着，好像家里一直没人，我给她拿了点吃的。") },
-      { id: "chen", name: "小陈", role: "网格员", stance: 0.99, line: line("chen-1", "这家是低保户，属于帮扶对象，先登记等街道安排就行。", { error: true, pointIndex: 1, knowledge: "生活困难不能替代报告判断；疑似侵害或危险应当及时报告。" }) },
-      { id: "lin", name: "小林", role: "社区工作者", stance: 0.94, line: line("lin-1", "先把孩子照片发到业主群里，让大家一起帮忙找家长。", { error: true, pointIndex: 2, knowledge: "公开可识别信息会造成二次传播，材料仅应向有必要知悉的渠道提供。" }) }
+      { id: "liu", name: "刘阿姨", role: "邻居", stance: 0.88, line: line("liu-1", "连着三晚了，孩子都在楼道坐着，家里灯不亮。我给她拿了点吃的。") },
+      { id: "chen", name: "小陈", role: "网格员", stance: 0.99, line: line("chen-1", "这户在低保帮扶名单里，先登记上，等街道统一安排就行。", { error: true, pointIndex: 1, knowledge: "生活困难不能替代报告判断；疑似侵害或危险应当及时报告。" }) },
+      { id: "lin", name: "小林", role: "社区工作者", stance: 0.94, line: line("lin-1", "我拍张孩子的照片发业主群，让邻居们一起认认是谁家的。", { error: true, pointIndex: 2, knowledge: "公开可识别信息会造成二次传播，材料仅应向有必要知悉的渠道提供。" }) }
     ]
   },
   {
     id: "detective-threat",
     materialId: "report-duty",
     title: "群里的约架",
-    brief: "一名学生拿着手机来求助，说有人约好今天放学在巷口堵他。三个人正在商量先做什么。",
+    brief: "你是青少年社工。一名学生拿着手机来求助，截图里有人约好今天放学在巷口堵他。",
     time: "下午 15:40 · 虚构社区青少年活动室",
     misjudgePoint: 2,
     characters: [
-      { id: "ajie", name: "阿杰", role: "学生", stance: 0.9, line: line("aj-1", "截图我都留着，发送时间和那个账号都在，我没删。") },
-      { id: "wu", name: "吴姐", role: "青少年社工", stance: 0.95, line: line("wu-1", "先看他今天怎么回家、有没有人能接，材料同时交给公安。") },
-      { id: "tang", name: "唐师傅", role: "活动室值班", stance: 1, line: line("tang-1", "小孩子网上吵两句，等真打起来再说，现在报太早。", { error: true, pointIndex: 2, knowledge: "报告不以后果已经发生为前提；出现具体威胁与近期危险就应当立即报告，不等自行查清。" }) }
+      { id: "ajie", name: "阿杰", role: "学生", stance: 0.9, line: line("aj-1", "他们说的是今天放学，在巷口。截图我没删，时间都在上面。") },
+      { id: "wu", name: "吴姐", role: "青少年社工", stance: 0.95, line: line("wu-1", "先定他今天怎么回去、谁能来接。材料我这边同步报公安。") },
+      { id: "tang", name: "唐师傅", role: "活动室值班", stance: 1, line: line("tang-1", "网上放狠话的多，真动手的少。等真出了事再报也不迟，现在报上去也没法处理。", { error: true, pointIndex: 2, knowledge: "报告不以后果已经发生为前提；出现具体威胁与近期危险就应当立即报告，不等自行查清。" }) }
     ]
   },
   {
     id: "detective-creator",
     materialId: "evidence-privacy",
     title: "被围攻的账号",
-    brief: "一名未成年博主的信息被挂到了本地群里，私信里还有人说要找上门。三个人在看这些截图。",
+    brief: "你是驻站社工。一名未成年博主的信息被挂进本地群，私信里有人说要上门，志愿者已经凑过来出主意。",
     time: "傍晚 18:20 · 虚构青少年网络服务室",
     misjudgePoint: 1,
     characters: [
-      { id: "lan", name: "小岚", role: "未成年博主", stance: 0.89, line: line("lan-1", "私信和评论我都截了原图，时间也在，没往外发。") },
-      { id: "qiu", name: "邱哥", role: "志愿者", stance: 1, line: line("qiu-1", "把账号和截图发到本地大群吧，人多力量大，大家一起找这个人。", { error: true, pointIndex: 1, knowledge: "公开传播账号与截图会扩散可识别信息、造成二次伤害，材料只应向有必要知悉的渠道提供。" }) },
-      { id: "wu", name: "吴姐", role: "社工", stance: 0.95, line: line("wu-2", "材料只导出给公安一份，这里的转发先停住。") }
+      { id: "lan", name: "小岚", role: "未成年博主", stance: 0.89, line: line("lan-1", "私信我截了原图，时间没动过，也没转发给任何人。") },
+      { id: "qiu", name: "邱哥", role: "志愿者", stance: 1, line: line("qiu-1", "把截图发本地大群，人多线索多，说不定马上就有人认出这人是谁。", { error: true, pointIndex: 1, knowledge: "公开传播账号与截图会扩散可识别信息、造成二次伤害，材料只应向有必要知悉的渠道提供。" }) },
+      { id: "wu", name: "吴姐", role: "社工", stance: 0.95, line: line("wu-2", "原始截图导出给公安一份就够。转发到群里的口子，先关掉。") }
     ]
   },
   {
     id: "detective-gate",
     materialId: "teacher-duty",
     title: "放学前十分钟",
-    brief: "放学铃响前，三位老师在校门口说起一名学生：家里昨晚有争吵声，今天又被同学堵过一次。",
+    brief: "你是班主任。放学铃响前十分钟，校门口全是接孩子的家长。这个学生昨晚家里有争吵声，今天又被同学堵过一次。",
     time: "傍晚 17:25 · 虚构学校校门口",
     misjudgePoint: 0,
     characters: [
-      { id: "ma", name: "老马", role: "门卫", stance: 1, line: line("ma-1", "家长都在门口等着了，先让孩子走，明天再问也不迟。", { error: true, pointIndex: 0, knowledge: "发现线索时要先确认孩子当前是否安全、有没有可靠的人陪同，不能把风险处置推给家长或推到明天。" }) },
-      { id: "li", name: "李老师", role: "班主任", stance: 0.93, line: line("li-2", "今天先不让她一个人走，我送她到有人接的地方。") },
-      { id: "wang", name: "王老师", role: "年级组长", stance: 0.96, line: line("wang-2", "两件事分开记：家里一条，被堵一条，都按她的原话写。") }
+      { id: "ma", name: "老马", role: "门卫", stance: 1, line: line("ma-1", "门口家长都等着呢，先让孩子跟着走，有事明天上课再说。", { error: true, pointIndex: 0, knowledge: "发现线索时要先确认孩子当前是否安全、有没有可靠的人陪同，不能把风险处置推给家长或推到明天。" }) },
+      { id: "li", name: "李老师", role: "班主任", stance: 0.93, line: line("li-2", "今天不能让她自己走。我先带着，等确认有人接再放人。") },
+      { id: "wang", name: "王老师", role: "年级组长", stance: 0.96, line: line("wang-2", "家里一条、被堵一条，分开记，都按她原话，别合并成一段。") }
     ]
   },
   {
     id: "detective-night",
     materialId: "doctor-duty",
     title: "夜班急诊",
-    brief: "晚上九点多，一名孩子被送来处理伤口，陪同人说是在家摔的。三个人在处置室里。",
+    brief: "你是值班医师。晚上九点多，一名孩子被送来处理伤口，陪同人一进门就说是在家摔的。",
     time: "夜间 21:15 · 虚构医院急诊处置室",
     misjudgePoint: 2,
     characters: [
-      { id: "zhou", name: "周医生", role: "值班医师", stance: 1, line: line("zhou-2", "先清创处理，部位、大小、颜色照实写，不写结论。") },
-      { id: "qian", name: "钱医生", role: "规培医生", stance: 0.99, line: line("qian-1", "家属说是摔的，病历就按摔伤写，别写那么多。", { error: true, pointIndex: 1, knowledge: "病历要客观记录伤情、就诊陈述和时间；用家属说法代替观察记录，会让后续核查失去原始信息。" }) },
-      { id: "xu", name: "许护士", role: "分诊护士", stance: 0.95, line: line("xu-2", "我问她一句现在安不安全，请陪同人在外面等一下。") }
+      { id: "zhou", name: "周医生", role: "值班医师", stance: 1, line: line("zhou-2", "先清创。伤的位置、大小、形状、颜色，按眼睛看到的写，不下结论。") },
+      { id: "qian", name: "钱医生", role: "规培医生", stance: 0.99, line: line("qian-1", "家属说是摔的，首诊记录就照家属说的写，写太细反而容易惹麻烦。", { error: true, pointIndex: 1, knowledge: "病历要客观记录伤情、就诊陈述和时间；用家属说法代替观察记录，会让后续核查失去原始信息。" }) },
+      { id: "xu", name: "许护士", role: "分诊护士", stance: 0.95, line: line("xu-2", "我问她一句现在安不安全，请家属在门外等几分钟。") }
     ]
   },
   {
     id: "detective-rental",
     materialId: "community-duty",
     title: "反锁的门",
-    brief: "走访时发现一户人家的门从外面锁着，里面有孩子的声音。邻居说这家人白天都出去做工。",
+    brief: "你是社区副主任。走访到这栋出租楼，一户的门从外面锁着，里面有孩子的声音。",
     time: "上午 10:40 · 虚构城中村出租屋楼道",
     misjudgePoint: 0,
     characters: [
-      { id: "liu", name: "刘阿姨", role: "邻居", stance: 0.88, line: line("liu-2", "我先敲敲门，问问里面几个孩子、今天有没有吃的。") },
-      { id: "chen", name: "小陈", role: "网格员", stance: 0.94, line: line("chen-2", "大人去哪、几点回来、有没有别的亲属能来，我一项项记清楚。") },
-      { id: "fang", name: "方姐", role: "社区副主任", stance: 1, line: line("fang-1", "是亲戚帮忙看着，属于家里自己的安排，这个不用报。", { error: true, pointIndex: 1, knowledge: "长期无人照料本身就属于应当报告的情形；以「亲戚帮忙」「家庭安排」为由不报，是错的。" }) }
+      { id: "liu", name: "刘阿姨", role: "邻居", stance: 0.88, line: line("liu-2", "门是从外面锁的。我敲了半天，里面有小孩应声。") },
+      { id: "chen", name: "小陈", role: "网格员", stance: 0.94, line: line("chen-2", "大人几点走的、什么时候回来、有没有别的亲属能来，我一项一项问清楚。") },
+      { id: "fang", name: "方姐", role: "社区副主任", stance: 1, line: line("fang-1", "说是托给亲戚看着了，属于家里自己的安排，这种情况不用往上报。", { error: true, pointIndex: 1, knowledge: "长期无人照料本身就属于应当报告的情形；以「亲戚帮忙」「家庭安排」为由不报，是错的。" }) }
     ]
   }
 ];
