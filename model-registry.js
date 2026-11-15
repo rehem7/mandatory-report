@@ -39,7 +39,8 @@ const excludedModels = new Set([
 const domesticBrands = new Set(["deepseek", "glm", "kimi", "minimax", "longcat"]);
 const chatCapable = id => !/(?:embedding|rerank|whisper|tts|dall-e|image|imagen|veo|sora|stable-diffusion|flux)/i.test(id);
 {
-  let flashUpstreamId = "deepseek-flash-1017";
+  // Official name is deepseek-flash; dated IDs such as deepseek-flash-1017 are rejected with HTTP 400.
+  let flashUpstreamId = "deepseek-flash";
   if (deepseekKey && process.env.AI_CATALOG_ENABLED !== "0") {
     try {
       const response = await fetch(deepseek + "/models", { headers: { Authorization: `Bearer ${deepseekKey}` }, redirect: "error", signal: AbortSignal.timeout(15000) });
