@@ -109,33 +109,6 @@
 .summary-basis strong{display:block;font-size:11.5px;color:var(--ink);margin-bottom:4px}
 .summary-basis p{margin:0;font-size:11px;line-height:1.68;color:#4a5a41;overflow-wrap:anywhere}
 
-/* 两难抉择 */
-.game-entry[data-tone="blue"]{border-color:#cfdcee;background:#fbfcff}
-.game-entry[data-tone="blue"] .game-entry-icon{background:#e8effa;color:#3f6291}
-.dilemma-options{display:grid;grid-template-columns:1fr;gap:10px}
-/* 两个选项都写成"认真负责的人会做的决定"，所以字重、字号、留白必须完全一致——
-   靠视觉差别暗示答案，这道题就白出了。 */
-.dilemma-option{display:flex;align-items:flex-start;justify-content:flex-start;text-align:left;gap:12px;padding:14px 16px;border-radius:16px;border:1px solid var(--border);background:#fff;cursor:pointer;transition:border-color .14s,box-shadow .14s,background .14s}
-.dilemma-option:hover:not([disabled]){border-color:#b7cbe4;box-shadow:0 4px 14px #1d3a6014}
-.dilemma-option[disabled]{cursor:default}
-.opt-label{display:grid;place-items:center;width:24px;height:24px;flex:0 0 auto;border-radius:50%;background:var(--soft);border:1px solid var(--border);font-size:11px;font-weight:800;color:var(--muted);transition:background .14s,color .14s,border-color .14s}
-.opt-text{flex:1;min-width:0;font-size:12.5px;line-height:1.7;color:var(--text);overflow-wrap:anywhere}
-.dilemma-option.is-right{border-color:#8fca68;background:#f4fae9}
-.dilemma-option.is-right .opt-label{background:#4d7f2b;border-color:#4d7f2b;color:#fff}
-.dilemma-option.is-wrong{border-color:#d99b9e;background:var(--red-pale)}
-.dilemma-option.is-wrong .opt-label{background:var(--red);border-color:var(--red);color:#fff}
-/* 选错之后剩下的那条：虚线只是提示"这里还有一条没看"，不是标出正确答案 */
-.dilemma-option.is-alt{border-style:dashed;border-color:#b7cbe4;background:#f7fafd}
-.dilemma-result{border:1px solid;border-radius:14px;padding:12px 14px;animation:chip-in .22s ease both}
-.dilemma-result[data-tone="ok"]{background:#f1fae7;border-color:#bfdc9f}
-.dilemma-result[data-tone="bad"]{background:#fdf3f1;border-color:#ecc9c1}
-.dilemma-result strong{display:block;font-size:11.5px;margin-bottom:5px}
-.dilemma-result[data-tone="ok"] strong{color:#3d6a24}
-.dilemma-result[data-tone="bad"] strong{color:#a33a2b}
-.dilemma-result p{margin:0;font-size:12.5px;line-height:1.7;color:var(--text)}
-.dilemma-result small{display:block;margin-top:6px;font-size:11px;line-height:1.65;color:var(--muted)}
-.dilemma-result .dilemma-alt-tip{color:#3f6291}
-
 /* 找茬大侦探 */
 .game-rules-wrap{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:26px;align-items:start;padding:6px 0 14px}
 .rules-art{width:100%;max-width:210px;border-radius:18px;display:block;box-shadow:0 8px 24px #16330014;justify-self:end}
@@ -186,8 +159,10 @@
 .game-entries{margin:26px 0 0;padding:20px 22px;border:1px solid #cfe3bf;border-radius:22px;background:linear-gradient(160deg,#f6fbf0,#eef6e6)}
 .game-entries-head h3{font-size:16px;margin:0 0 5px}
 .game-entries-head p{font-size:11.5px;color:var(--muted);margin:0 0 14px}
-/* 三个游戏排一行；窄一档退成两列，第三张单独占一行也不至于只剩半边空着 */
-.game-entry-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+/* 两个游戏排一行：有找茬关的节两张卡，没启用的节只剩投放关一张 */
+.game-entry-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+/* 只剩一个游戏时（学习一 / 学习二不挂找茬关）让卡片占满整行，别在右边留半格空位 */
+.game-entries[data-count="1"] .game-entry-grid{grid-template-columns:minmax(0,1fr)}
 .game-entry{background:#fff;border:1px solid var(--border);border-radius:18px;padding:15px 16px;display:flex;flex-direction:column;gap:8px}
 .game-entry[data-tone="amber"]{border-color:#ecdfbe;background:#fffdf6}
 .game-entry-head{display:flex;align-items:center;gap:10px}
@@ -208,9 +183,6 @@
 .lesson-point.is-weak{color:var(--red);font-weight:600;position:relative;padding-left:0}
 .lesson-point.is-weak:after{content:"待巩固";font-size:9px;font-weight:700;color:#fff;background:var(--red);border-radius:999px;padding:1px 7px;margin-left:8px;vertical-align:2px}
 
-@media(max-width:1180px){
-  .game-entry-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
 @media(max-width:860px){
   /* 手机上一屏放不下卡片区和栏框，把栏框置顶吸附，点卡片时它始终可见。 */
   .game-board{display:flex;flex-direction:column;gap:11px}
@@ -247,19 +219,15 @@
 }
 
 /* ---------------- 立绘模式：人物站在场景里 ----------------
-   立绘七分身底部会被画面切断，所以底部叠一层「地面」渐变把断口收掉。
+   素材是画到鞋底的全身像，脚是真的踩在地上，不需要在地面叠渐变盖断口。
    高度跟着视口走，保证「舞台 + 台词 + 底部按钮」一屏放得下，台词不会被挤到可视区外。 */
 .detective-stage.is-stand{height:clamp(288px,calc(100dvh - 342px),520px);min-height:0;padding:16px 18px 0;justify-content:flex-start}
 .detective-stage.is-stand>.cast{
-  position:absolute;left:0;right:0;bottom:0;height:79%;
+  position:absolute;left:0;right:0;bottom:0;height:86%;
   display:flex;align-items:flex-end;justify-content:center;gap:5%;
   padding:0 6%;pointer-events:none;
 }
-.detective-stage.is-stand>.cast:before{
-  content:"";position:absolute;left:0;right:0;bottom:0;height:15%;z-index:2;
-  background:linear-gradient(180deg,#eaf1e200 0%,#e8f0dea8 46%,#e3edd6e8 100%);
-  pointer-events:none;
-}
+/* 接地影交给 cast-figure 自带的 drop-shadow，叠渐变会把鞋盖掉半截 */
 .detective-stage.is-stand .cast-member{
   /* --cast-h：角色身高系数（男高女矮、老人略矮），在 game-content.js 的 stance 字段里给；
      底边对齐地面线，系数只影响头顶高度，不影响站位。不写就按 1 处理。 */

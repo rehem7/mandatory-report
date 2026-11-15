@@ -30,9 +30,9 @@ routes.set('/receiver-filters.js', 'receiver-filters.js');
 const digest = value => crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
 
 export function staticFiles(root) {
-  // 普法小游戏的美术资源：scenes/ 与 cast/ 目录里有什么就注册什么，
-  // 加新图只要丢进目录再重启，不用改这张白名单。
-  for (const folder of ['assets/visual/scenes', 'assets/visual/cast', 'assets/visual/cast/stand']) {
+  // 找茬关的美术资源：目录里有什么就注册什么，加新图只要丢进目录再重启，不用改这张白名单。
+  // scenes-team/ 是 6 张场景底图，cast/stand-team/ 是 13 个角色立绘；旧版与换画风那两套已移出仓库。
+  for (const folder of ['assets/visual/scenes-team', 'assets/visual/cast/stand-team']) {
     let names = [];
     try { names = fs.readdirSync(path.join(root, 'public', folder)); } catch { continue; }
     for (const name of names) if (/\.(?:png|jpe?g|webp)$/i.test(name)) routes.set('/' + folder + '/' + name, folder + '/' + name);

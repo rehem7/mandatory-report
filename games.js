@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { gameMeta, sortingLevels, detectiveScenes, dilemmaLevels, levelOf, levelsForMaterial } from "./game-content.js";
+import { gameMeta, sortingLevels, detectiveScenes, levelOf, levelsForMaterial } from "./game-content.js";
 
 const fail = (message, status = 400) => { throw Object.assign(Error(message), { status }); };
 const MAX_DURATION = 30 * 60 * 1000, RUNS_PER_OWNER = 300;
@@ -9,19 +9,16 @@ const MAX_DURATION = 30 * 60 * 1000, RUNS_PER_OWNER = 300;
 // 避免"没投放完就通关""漏判当通关"这类状态错误写进台账。
 export const gameCatalog = () => ({
   games: gameMeta,
-  levels: { sorting: sortingLevels, detective: detectiveScenes, dilemma: dilemmaLevels },
+  levels: { sorting: sortingLevels, detective: detectiveScenes },
   byMaterial: Object.fromEntries(sortingLevels.map(level => [level.materialId, levelsForMaterial(level.materialId)]))
 });
 
 const correctIds = level => new Set(level.bins.flatMap(bin => bin.cards.filter(card => card.correct).map(card => card.id)));
 const errorLines = scene => scene.characters.map(character => character.line).filter(line => line.isError);
-const answersOf = level => level.questions.map(question => question.options.find(option => option.correct)?.id || null);
 
 // 投放关按「一次投对率」记分：分母是本节正确卡总数，扣掉投错过的卡（按张去重）。
 // 例如 9 张正确卡错投 1 张 → 89 分。80 分达标。
 // 找茬关误判即失败，能通关就一定没误判，再折算分数没有区分度，所以不记分。
-// 两难关每题只有两个选项、且允许换一条重选，分数量表只剩 0/33/67/100 四档，
-// 错一题就一刀切到不达标，不如直接看哪几道首答偏了。所以也不记分。
 const PASS_LINE = 80;
 const scoreFor = (gameId, level, { misplaced, cleared }) => {
   if (!cleared || gameId !== "sorting") return null;
@@ -63,20 +60,6 @@ function weakPointsFor(gameId, level, { misplaced, outcome, foundErrorIds, first
     }
     return [...points.values()];
   }
-  if (gameId === "dilemma") {
-    // 只看首答：换一条路选对，说明当场纠正了，但第一反应偏了仍然值得回学习页看一眼。
-    return level.questions
-      .filter((question, index) => firstChoices[index] && firstChoices[index] !== answersOf(level)[index])
-      .flatMap(question => {
-        const wrong = question.options.find(option => !option.correct);
-        return (question.pointIndexes || []).map(pointIndex => ({
-          materialId: level.materialId,
-          pointIndex,
-          nodeId: question.id,
-          reason: wrong.note
-        }));
-      });
-  }
   const set = new Set(foundErrorIds);
   return errorLines(level)
     .filter(line => !set.has(line.id))
@@ -93,13 +76,6 @@ const stringList = (value, limit) => {
   if (!Array.isArray(value) || value.length > limit || value.some(item => typeof item !== "string" || item.length > 80)) fail("游戏提交数据格式不正确");
   return [...new Set(value)];
 };
-// 两难关的选择是按题对位的数组，去重会打乱题号，所以这里不去重。
-const choiceList = (value, limit) => {
-  if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > limit || value.some(item => typeof item !== "string" || item.length > 80)) fail("游戏提交数据格式不正确");
-  return value;
-};
-
 export function recordGameRun(db, actor, payload, stamp = Date.now()) {
   const { gameId, levelId } = payload;
   const level = levelOf(gameId, levelId);
@@ -110,20 +86,12 @@ export function recordGameRun(db, actor, payload, stamp = Date.now()) {
   if (!Number.isFinite(durationMs) || durationMs < 0 || durationMs > MAX_DURATION) fail("游戏用时无效");
 
   const placed = stringList(payload.placed, 40), misplaced = stringList(payload.misplaced, 40), foundErrorIds = stringList(payload.foundErrorIds, 8);
-  const choices = choiceList(payload.choices, 12), firstChoices = choiceList(payload.firstChoices, 12);
   let cleared;
   if (gameId === "sorting") {
     const required = correctIds(level);
     if (placed.some(id => !required.has(id))) fail("投放记录与关卡不匹配");
     cleared = [...required].every(id => placed.includes(id));
     misplaced.forEach(id => { if (!level.bins.some(bin => bin.cards.some(card => card.id === id && !card.correct))) fail("投放记录与关卡不匹配"); });
-  } else if (gameId === "dilemma") {
-    const answers = answersOf(level);
-    const valid = new Set(level.questions.flatMap(question => question.options.map(option => option.id)));
-    // 选择按题号对位：选中途退出时长度可以短，但不能超长，否则"第 2 题选了 A"会错位到第 1 题去。
-    if (choices.length > answers.length || choices.some(id => !valid.has(id))) fail("两难选择与关卡不匹配");
-    if (firstChoices.length > answers.length || firstChoices.some(id => !valid.has(id))) fail("两难选择与关卡不匹配");
-    cleared = choices.length === answers.length && answers.every((id, index) => choices[index] === id);
   } else {
     const all = errorLines(level).map(line => line.id);
     if (foundErrorIds.some(id => !all.includes(id))) fail("找茬记录与场景不匹配");
@@ -141,10 +109,8 @@ export function recordGameRun(db, actor, payload, stamp = Date.now()) {
     score: scoreFor(gameId, level, { misplaced, cleared }),
     durationMs,
     placed, misplaced, foundErrorIds,
-    // 两难关记下每题的首答与最终选择：首答偏了但当场换过来，学习页仍要标一条。
-    choices, firstChoices,
     // 通关也记：只要投错过就留下知识点，学习页据此标红。没投错时 weakPointsFor 本来就是空的。
-    weakPoints: weakPointsFor(gameId, level, { placed, misplaced, outcome, foundErrorIds, firstChoices, nodeId: payload.nodeId }),
+    weakPoints: weakPointsFor(gameId, level, { placed, misplaced, outcome, foundErrorIds, nodeId: payload.nodeId }),
     createdAt: new Date(stamp).toISOString()
   };
   db.gameRuns ||= [];

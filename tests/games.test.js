@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { materials } from '../content.js';
-import { sortingLevels, detectiveScenes, dilemmaLevels, gameMeta } from '../game-content.js';
+import { sortingLevels, detectiveScenes, gameMeta } from '../game-content.js';
 import { recordGameRun, gameState, gameCatalog } from '../games.js';
 
 const actor = { ownerId: 'a', profile: { id: 'a-profile' } }, other = { ownerId: 'b', profile: { id: 'b-profile' } };
@@ -12,7 +12,7 @@ const learningFor = (...materialIds) => ({ learning: materialIds.map((materialId
 const correctOf = level => level.bins.flatMap(bin => bin.cards.filter(card => card.correct).map(card => card.id));
 
 test('每个普法主题都有可玩的关卡，知识点都指回学习材料里的真实条目', () => {
-  assert.equal(gameMeta.length, 3);
+  assert.equal(gameMeta.length, 2, '学习页只剩投放关与找茬关两个游戏');
   for (const material of materials) {
     const level = sortingLevels.find(item => item.materialId === material.id);
     assert.ok(level, material.id + ' 缺少归类关卡');
@@ -53,27 +53,6 @@ test('每个普法主题都有可玩的关卡，知识点都指回学习材料�
     }
     assert.ok(scene.misjudgePoint < material.points.length);
   }
-  // 两难关：一节材料一关，每题两个选项、恰好一个正确。
-  // 两个选项都必须写成"认真负责的人会做的决定"，所以还要锁住选项长度接近，避免一条长一条短。
-  for (const level of dilemmaLevels) {
-    const material = materials.find(item => item.id === level.materialId);
-    assert.ok(material, level.id + ' 对应材料不存在');
-    assert.equal(level.questions.length, 3, level.id + ' 应该正好 3 道题');
-    for (const question of level.questions) {
-      assert.equal(question.options.length, 2, question.id + ' 必须是两条路');
-      assert.equal(question.options.filter(option => option.correct).length, 1, question.id + ' 只能有一条走得通');
-      assert.ok(question.options.every(option => option.outcome && option.note), question.id + ' 两个选项都要写清结果与说明');
-      assert.ok((question.pointIndexes || []).every(index => index >= 0 && index < material.points.length), question.id + ' 知识点索引越界');
-      assert.match(question.basis, /^(未保法第十一条|九部门意见第)/, question.id + ' 依据缺少条文出处标签');
-      assert.ok(question.basis.includes('：'), question.id + ' 依据缺少出处分隔');
-      assert.ok(question.basis.length >= 60, question.id + ' 依据过短，出处加条文至少要到 60 字');
-      assert.ok(!/本情形|实务要求/.test(question.basis), question.id + ' 依据应为条文内容，不接受自拟表述');
-      // 靠字长、语气能猜到答案的题等于没出：两条路的文字量要在一个档位上。
-      const [a, b] = question.options.map(option => option.text.length);
-      assert.ok(Math.max(a, b) / Math.min(a, b) < 1.6, question.id + ' 两个选项长短差太多，容易被字面猜出来');
-    }
-  }
-  assert.equal(new Set(dilemmaLevels.map(level => level.id)).size, dilemmaLevels.length);
   assert.equal(new Set(sortingLevels.map(level => level.id)).size, sortingLevels.length);
   assert.equal(new Set(detectiveScenes.map(scene => scene.id)).size, detectiveScenes.length);
 });
@@ -88,13 +67,18 @@ test('法条只当栏框依据，卡片里不应再出现法条原文', () => {
   }
 });
 
-test('找茬：每节材料两个场景，换场合而不换法条', () => {
-  for (const material of materials) {
-    const scenes = detectiveScenes.filter(scene => scene.materialId === material.id);
-    assert.equal(scenes.length, 2, material.id + ' 应该有 2 个找茬场景');
-    assert.notEqual(scenes[0].title, scenes[1].title);
-    // 两个场景的场合要真的不同，否则只是换了个标题
-    assert.notEqual(scenes[0].time, scenes[1].time, material.id + ' 两个场景的时间地点重复');
+test('找茬：只跑组员这 6 个情境，教师 / 医护 / 社区三节各 2 个场景', () => {
+  // 场景按剧情落在谁的岗位上就挂哪一节：教室、诊室、社区各自归位。
+  // 两个通用节（report-duty / evidence-privacy）不再挂找茬关，它们的场景已经回到岗位节里了。
+  const active = new Set(['teacher-duty', 'doctor-duty', 'community-duty']);
+  assert.equal(detectiveScenes.length, 6, '找茬只保留组员这 6 关');
+  assert.deepEqual([...new Set(detectiveScenes.map(scene => scene.materialId))].sort(), [...active].sort());
+  for (const materialId of active) {
+    const scenes = detectiveScenes.filter(scene => scene.materialId === materialId);
+    assert.equal(scenes.length, 2, materialId + ' 应该有 2 个找茬场景');
+    // 场景的标题与场合都要真的不同，否则只是换了个标题
+    assert.equal(new Set(scenes.map(scene => scene.title)).size, scenes.length, materialId + ' 场景标题重复');
+    assert.equal(new Set(scenes.map(scene => scene.time)).size, scenes.length, materialId + ' 场景的时间地点重复');
   }
   // 台词、知识点、id 都不能复制粘贴：同一句话考两次，等于只考了一次
   const texts = detectiveScenes.flatMap(scene => scene.characters.map(character => character.line.text));
@@ -108,33 +92,30 @@ test('找茬：每节材料两个场景，换场合而不换法条', () => {
   assert.ok(new Set(positions).size >= 2, '错误角色总在同一个位置');
 });
 
-test('关卡目录按材料分发，找茬是一组场景', () => {
+test('关卡目录按材料分发，找茬只在教师 / 医护 / 社区三节下发场景', () => {
   const catalog = gameCatalog();
+  const active = new Set(['teacher-duty', 'doctor-duty', 'community-duty']);
   for (const material of materials) {
     const pair = catalog.byMaterial[material.id];
     assert.ok(pair?.sorting, material.id + ' 缺少投放关');
-    assert.equal(pair.detective.length, 2, material.id + ' 的找茬关应该下发 2 个场景');
-    assert.ok(pair.dilemma, material.id + ' 缺少两难关');
-    assert.ok(catalog.levels.dilemma.some(level => level.id === pair.dilemma.id));
+    assert.ok(catalog.levels.sorting.some(level => level.id === pair.sorting.id));
+    if (active.has(material.id)) assert.equal(pair.detective.length, 2, material.id + ' 应该下发 2 个找茬场景');
+    // 通用两节不挂找茬关，学习页据此不出入口（public/games.js 的空数组分支）。
+    else assert.deepEqual(pair.detective, [], material.id + ' 没启用找茬，不该下发场景');
   }
+  assert.equal(catalog.levels.detective.length, 6, '目录里的找茬关卡也只有组员这 6 关');
 });
 
-test('15 条知识点在投放关与找茬关合并后全覆盖', () => {  for (const material of materials) {
+test('启用了找茬的三节：投放关与找茬关合并后知识点全覆盖', () => {
+  // 通用两节只有投放关；教师 / 医护 / 社区三节是投放关 + 两个找茬场景，三个游戏都要把本节要点考全。
+  for (const materialId of ['teacher-duty', 'doctor-duty', 'community-duty']) {
+    const material = materials.find(item => item.id === materialId);
     const covered = new Set();
-    const level = sortingLevels.find(item => item.materialId === material.id);
+    const level = sortingLevels.find(item => item.materialId === materialId);
     for (const bin of level.bins) for (const index of bin.pointIndexes) covered.add(index);
-    const scene = detectiveScenes.find(item => item.materialId === material.id);
-    for (const character of scene.characters) if (character.line.pointIndex != null) covered.add(character.line.pointIndex);
-    assert.deepEqual([...covered].sort(), material.points.map((_, index) => index), material.id + ' 还有知识点两个游戏都没考到');
-  }
-});
-
-test('两难关单独也能把本节知识点全覆盖，不靠另外两个游戏兜底', () => {
-  for (const material of materials) {
-    const level = dilemmaLevels.find(item => item.materialId === material.id);
-    assert.ok(level, material.id + ' 缺少两难关');
-    const covered = new Set(level.questions.flatMap(question => question.pointIndexes));
-    assert.deepEqual([...covered].sort(), material.points.map((_, index) => index), material.id + ' 两难关有知识点没考到');
+    const scenes = detectiveScenes.filter(item => item.materialId === materialId);
+    for (const scene of scenes) for (const character of scene.characters) if (character.line.pointIndex != null) covered.add(character.line.pointIndex);
+    assert.deepEqual([...covered].sort(), material.points.map((_, index) => index), materialId + ' 还有知识点两个游戏都没考到');
   }
 });
 
@@ -201,34 +182,6 @@ test('找茬关不折算分数：误判即失败，通关即全对', () => {
   assert.equal(done.run.score, null, '找茬关通关即全对，再折算分数没有区分度');
 });
 
-test('两难抉择：中途退出不算通关，首答偏了换一条选对仍要留痕', () => {
-  const db = learningFor('report-duty');
-  const level = dilemmaLevels.find(item => item.materialId === 'report-duty');
-  const answers = level.questions.map(question => question.options.find(option => option.correct).id);
-  const wrongIds = level.questions.map(question => question.options.find(option => !option.correct).id);
-
-  const partial = recordGameRun(db, actor, { gameId: 'dilemma', levelId: level.id, durationMs: 30000, choices: [answers[0]], firstChoices: [answers[0]] });
-  assert.equal(partial.run.cleared, false, '只答一题不算通关');
-  assert.equal(partial.run.score, null, '两难关不折算分数');
-  assert.deepEqual(partial.run.weakPoints, [], '第一题就选对了，没有偏差');
-
-  // 首答选错、换一条选对：算通关，但第一遍那条要留在学习页标出来。
-  const corrected = recordGameRun(db, actor, { gameId: 'dilemma', levelId: level.id, durationMs: 60000, choices: answers, firstChoices: [wrongIds[0], answers[1], answers[2]] });
-  assert.equal(corrected.run.cleared, true);
-  assert.equal(corrected.run.weakPoints.length, level.questions[0].pointIndexes.length);
-  assert.equal(corrected.run.weakPoints[0].pointIndex, level.questions[0].pointIndexes[0]);
-  assert.ok(corrected.run.weakPoints[0].reason, '偏差题要带上为什么这条路走不通');
-
-  const perfect = recordGameRun(db, actor, { gameId: 'dilemma', levelId: level.id, durationMs: 45000, choices: answers, firstChoices: answers });
-  assert.equal(perfect.run.cleared, true);
-  assert.deepEqual(perfect.run.weakPoints, []);
-  assert.equal(gameState(db, 'a').weakPoints.length, 0, '最新一次全对之后不再标红');
-
-  // 选择与题目对不上时不能写进台账：多写一条会把题号整体错位。
-  assert.throws(() => recordGameRun(db, actor, { gameId: 'dilemma', levelId: level.id, durationMs: 1000, choices: [...answers, answers[0]] }), /不匹配/);
-  assert.throws(() => recordGameRun(db, actor, { gameId: 'dilemma', levelId: level.id, durationMs: 1000, choices: ['made-up-option'] }), /不匹配/);
-});
-
 test('归类投放：投错的卡片记入错题明细，并定位到对应知识点', () => {
   const db = learningFor('evidence-privacy');
   const level = sortingLevels.find(item => item.materialId === 'evidence-privacy');
@@ -242,8 +195,8 @@ test('归类投放：投错的卡片记入错题明细，并定位到对应知�
 });
 
 test('找茬大侦探：漏判与误判都不算通关，重玩通关后薄弱点清空', () => {
-  const db = learningFor('teacher-duty');
   const scene = detectiveScenes.find(item => item.materialId === 'teacher-duty');
+  const db = learningFor(scene.materialId);
   const errorLine = scene.characters.find(character => character.line.isError).line;
 
   const miss = recordGameRun(db, actor, { gameId: 'detective', levelId: scene.id, cleared: false, outcome: 'miss', durationMs: 12000, foundErrorIds: [], nodeId: errorLine.id });
@@ -266,7 +219,13 @@ test('提交数据必须与关卡对得上，且不能绕过普法学习直接�
   assert.throws(() => recordGameRun(db, actor, { gameId: 'sorting', levelId: 'not-a-level', cleared: true, durationMs: 1000, placed: [] }), /关卡不存在/);
   assert.throws(() => recordGameRun(db, actor, { gameId: 'sorting', levelId: level.id, cleared: true, durationMs: 1000, placed: ['made-up-card'] }), /不匹配/);
   assert.throws(() => recordGameRun(db, actor, { gameId: 'sorting', levelId: level.id, cleared: true, durationMs: -1, placed: [] }), /用时无效/);
-  assert.throws(() => recordGameRun(db, actor, { gameId: 'detective', levelId: detectiveScenes.find(scene => scene.materialId === 'teacher-duty').id, cleared: true, durationMs: 1000, foundErrorIds: ['x'] }), /不匹配/);
+  assert.throws(() => recordGameRun(db, actor, { gameId: 'detective', levelId: 'detective-office', cleared: true, durationMs: 1000, foundErrorIds: ['x'] }), /关卡不存在/, '旧版找茬关已移出仓库，不能再提交成绩');
+  // 跨节刷不了：只学了教师节，提交医护节的关，先卡在"先学本节"这一步。
+  const otherScene = detectiveScenes.find(scene => scene.materialId === 'doctor-duty');
+  assert.throws(() => recordGameRun(db, actor, { gameId: 'detective', levelId: otherScene.id, cleared: true, durationMs: 1000, foundErrorIds: ['x'] }), /请先完成本节普法学习/);
+  // 就算两节都学完了，也不能把这一关的台词填进另一关。
+  const bothDb = learningFor('teacher-duty', 'doctor-duty');
+  assert.throws(() => recordGameRun(bothDb, actor, { gameId: 'detective', levelId: otherScene.id, cleared: true, durationMs: 1000, foundErrorIds: ['x'] }), /不匹配/);
   const fresh = { learning: [], gameRuns: [] };
   assert.throws(() => recordGameRun(fresh, actor, { gameId: 'sorting', levelId: level.id, cleared: true, durationMs: 1000, placed: correctOf(level) }), /请先完成本节普法学习/);
   assert.equal(db.gameRuns.length, 0, '校验失败不应留下记录');
